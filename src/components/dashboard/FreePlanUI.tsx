@@ -9,7 +9,6 @@ import {
   Check,
   Download,
   PenLine,
-  Upload,
 } from 'lucide-react';
 import { QueenMark } from '@/components/ui/Logo';
 
@@ -204,51 +203,5 @@ export function ProValueProps({ className = '' }: { className?: string }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-export function FreePlanQuickSteps({ onUpgrade }: { onUpgrade: () => void }) {
-  const steps = [
-    { n: '1', title: 'Upload', desc: 'Photo of your scoresheet', icon: Upload },
-    { n: '2', title: 'Review', desc: 'Validate & fix moves', icon: PenLine },
-    { n: '3', title: 'Export', desc: 'Copy or download PGN', icon: Download },
-  ] as const;
-
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-2">How it works</p>
-      <h3 className="mt-1 text-[17px] font-bold text-ink">Three steps to a clean PGN</h3>
-      <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-        {steps.map(({ n, title, desc, icon: Icon }) => (
-          <li
-            key={n}
-            className="relative rounded-xl border border-line bg-paper p-4 text-center sm:text-left"
-          >
-            <span className="mb-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-paper">
-              {n}
-            </span>
-            <Icon className="mb-1.5 h-4 w-4 text-muted-2" />
-            <p className="text-[13px] font-semibold text-ink">{title}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted">{desc}</p>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-5 flex flex-col gap-3 rounded-xl border border-dashed border-line-strong bg-paper/80 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2.5">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
-          <div>
-            <p className="text-[13px] font-semibold text-ink">Want to save games forever?</p>
-            <p className="text-[12px] text-muted">Pro adds cloud library & share links.</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onUpgrade}
-          className="shrink-0 rounded-xl bg-ink px-4 py-2.5 text-[12px] font-bold text-paper transition-all hover:bg-ink-soft active:scale-[0.98] cursor-pointer"
-        >
-          See Pro plans
-        </button>
-      </div>
-    </div>
   );
 }

@@ -39,7 +39,6 @@ import {
 import {
   ScanUsageMeter,
   FreeVsProTable,
-  FreePlanQuickSteps,
   FREE_SCAN_LIMIT,
 } from "@/components/dashboard/FreePlanUI";
 import { PricingModal } from "@/components/dashboard/PricingModal";
@@ -1503,15 +1502,15 @@ export default function DashboardClient({
     </section>
   );
 
-  const renderUploadLibraryOnboarding = (wide?: boolean) => (
+  const renderUploadLibraryOnboarding = (wide?: boolean) => {
+    if (!isPro) return null;
+
+    return (
     <section
       className={`${uploadShell(wide)} gp-fade-up`}
       style={{ animationDelay: "60ms" }}
     >
       <div className="rounded-[20px] border border-line/45 bg-surface/20 px-5 py-5 sm:px-6 sm:py-6">
-        {!isPro ? (
-          <FreePlanQuickSteps onUpgrade={() => setShowPricingModal(true)} />
-        ) : (
           <>
             <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:text-left">
               <div className="flex shrink-0 items-center justify-center -space-x-2.5">
@@ -1573,10 +1572,10 @@ export default function DashboardClient({
               ))}
             </div>
           </>
-        )}
       </div>
     </section>
-  );
+    );
+  };
 
   const renderUploadGreeting = (opts?: { centered?: boolean }) => (
     <p
