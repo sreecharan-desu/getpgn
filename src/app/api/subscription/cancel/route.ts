@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
-import Razorpay from 'razorpay';
+import {
+  createRazorpayClient,
+  PAYMENTS_UNAVAILABLE,
+  readRazorpayConfig,
+} from '@/lib/razorpayServer';
 
 export async function POST() {
   try {
@@ -13,17 +17,12 @@ export async function POST() {
       return NextResponse.json({ error: 'No active subscription found to cancel.' }, { status: 400 });
     }
 
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-
-    if (!keyId || !keySecret) {
-      return NextResponse.json({ error: 'Razorpay keys are not configured.' }, { status: 500 });
+    const razorpayEnv = readRazorpayConfig();
+    if (!razorpayEnv.ok) {
+      return NextResponse.json({ error: PAYMENTS_UNAVAILABLE }, { status: 503 });
     }
 
-    const razorpay = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    });
+    const razorpay = createRazorpayClient(razorpayEnv.config);
 
     try {
       // Cancel at the end of the current billing cycle (true = cancel at cycle end)
@@ -49,8 +48,10 @@ export async function POST() {
     });
 
   } catch (error) {
-    const err = error as Error;
-    console.error('Subscription cancellation error:', err);
-    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
+    console.error('Subscription cancellation error:', error);
+    return NextResponse.json(
+      { error: "We couldn't cancel your subscription. Please try again." },
+      { status: 500 },
+    );
   }
 }

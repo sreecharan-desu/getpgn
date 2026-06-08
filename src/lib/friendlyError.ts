@@ -18,6 +18,9 @@ const TECHNICAL_SIGNATURES: RegExp[] = [
   /\bnull\b|\bundefined\b/i,
   /<[^>]+>/, // HTML (e.g. an error page returned instead of JSON)
   /\{[\s\S]*"stack"/i,
+  /vercel|env var|environment variable|redeploy/i,
+  /razorpay_key|rzp_live_|rzp_test_|\.env\b/i,
+  /not configured on this deployment/i,
 ];
 
 export const GENERIC_ERROR = "Something went wrong. Please try again.";

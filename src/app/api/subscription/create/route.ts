@@ -3,7 +3,9 @@ import { requireVerifiedUser } from '@/lib/requireAuth';
 import {
   createRazorpayClient,
   getRazorpayPlanId,
+  logRazorpayDiagnostics,
   mapRazorpayError,
+  PLAN_UNAVAILABLE,
   readRazorpayConfig,
 } from '@/lib/razorpayServer';
 
@@ -25,10 +27,8 @@ export async function POST(req: NextRequest) {
 
     const planId = getRazorpayPlanId(planType);
     if (!planId) {
-      return NextResponse.json(
-        { error: 'Subscription plan ID is missing or not configured.' },
-        { status: 503 },
-      );
+      logRazorpayDiagnostics(planType, 'plan_id_missing');
+      return NextResponse.json({ error: PLAN_UNAVAILABLE }, { status: 503 });
     }
 
     const razorpayEnv = readRazorpayConfig();

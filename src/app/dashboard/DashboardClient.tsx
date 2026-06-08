@@ -86,7 +86,11 @@ import {
   consumePendingUpgrade,
   openRazorpayCheckout,
 } from "@/lib/razorpayCheckout";
-import { getCurrentMonthKey, getScanUsage } from "@/lib/scanLimits";
+import {
+  formatProScanAllowance,
+  getScanPeriodKey,
+  getScanUsage,
+} from "@/lib/scanLimits";
 import { filterSavedGames } from "@/lib/savedGameSearch";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -624,12 +628,12 @@ export default function DashboardClient({
           scanCount: Math.min(FREE_SCAN_LIMIT, prev.scanCount + 1),
         }));
       } else {
-        const monthKey = getCurrentMonthKey();
+        const periodKey = getScanPeriodKey(user.subscriptionPlan);
         setUser((prev) => ({
           ...prev,
-          monthlyScanMonth: monthKey,
+          monthlyScanMonth: periodKey,
           monthlyScanCount:
-            prev.monthlyScanMonth === monthKey ? prev.monthlyScanCount + 1 : 1,
+            prev.monthlyScanMonth === periodKey ? prev.monthlyScanCount + 1 : 1,
         }));
       }
 
@@ -1039,6 +1043,7 @@ export default function DashboardClient({
       limit={scanUsage.limit}
       tier={scanUsage.tier}
       planLabel={scanUsage.planLabel}
+      periodUnit={scanUsage.periodUnit}
       compact={opts?.compact}
       onUpgrade={!isPro ? () => setShowPricingModal(true) : undefined}
     />
@@ -1225,7 +1230,7 @@ export default function DashboardClient({
                     History Locked
                   </h3>
                   <p className="text-[12px] text-muted leading-relaxed">
-                    Keep every game forever. Pro includes monthly scan allowances
+                    Keep every game forever. Pro includes scan allowances
                     and shareable replays.
                   </p>
                 </div>
@@ -1271,12 +1276,18 @@ export default function DashboardClient({
           </span>
           <div className="min-w-0 flex-1 space-y-1">
             <span className="block text-[15px] font-semibold text-ink">
-              {isPro ? "Monthly scan limit reached" : "All free scans used"}
+              {isPro
+                ? scanUsage.periodUnit === "year"
+                  ? "Yearly scan limit reached"
+                  : "Monthly scan limit reached"
+                : "All free scans used"}
             </span>
             <span className="block text-[13px] leading-relaxed text-muted">
               {isPro
-                ? `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this month. Your quota resets on the 1st.`
-                : "Upgrade for monthly scan allowances, a permanent library, and shareable replays."}
+                ? scanUsage.periodUnit === "year"
+                  ? `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this year. Your quota resets on January 1.`
+                  : `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this month. Your quota resets on the 1st.`
+                : "Upgrade for scan allowances, a permanent library, and shareable replays."}
             </span>
           </div>
           {!isPro && (
@@ -1421,7 +1432,7 @@ export default function DashboardClient({
         {[
           {
             icon: InfinityIcon,
-            text: `${scanUsage.limit.toLocaleString()} scans/month on your plan`,
+            text: formatProScanAllowance(user.subscriptionPlan),
           },
           { icon: History, text: "Cloud game library" },
           { icon: Share2, text: "Shareable replay links" },
@@ -1685,27 +1696,37 @@ export default function DashboardClient({
               {scanUsage.used.toLocaleString()}/{scanUsage.limit.toLocaleString()}
             </span>{" "}
             scans used
-            {isPro ? " this month" : ""}
+            {isPro
+              ? scanUsage.periodUnit === "year"
+                ? " this year"
+                : " this month"
+              : ""}
           </span>
         </div>
         <h1 className="mt-3 text-[clamp(1.375rem,4vw,1.75rem)] font-semibold tracking-tight text-ink leading-snug">
           {scansExhausted
             ? isPro
-              ? "Monthly scan limit reached"
+              ? scanUsage.periodUnit === "year"
+                ? "Yearly scan limit reached"
+                : "Monthly scan limit reached"
               : "Upgrade to keep digitizing"
             : "Digitize your chess games"}
         </h1>
         <p className="mx-auto mt-2 max-w-[22rem] text-[14px] leading-relaxed text-muted">
           {scansExhausted
             ? isPro
-              ? `You've used all ${scanUsage.limit.toLocaleString()} scans for this month. Your quota resets on the 1st.`
-              : "You've used both free scans. Upgrade for monthly scan allowances and shareable replays."
+              ? scanUsage.periodUnit === "year"
+              ? `You've used all ${scanUsage.limit.toLocaleString()} scans for this year. Your quota resets on January 1.`
+              : `You've used all ${scanUsage.limit.toLocaleString()} scans for this month. Your quota resets on the 1st.`
+              : "You've used both free scans. Upgrade for scan allowances and shareable replays."
             : "Upload a handwritten scoresheet — we extract moves, validate the game, and export clean PGN."}
         </p>
         {!scansExhausted && (
           <p className="mt-3 text-[12px] text-muted-2">
             {isPro
-              ? `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this month`
+              ? scanUsage.periodUnit === "year"
+                ? `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this year`
+                : `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this month`
               : `No credit card · ${scanUsage.remaining} free scan${scanUsage.remaining === 1 ? "" : "s"} left`}
           </p>
         )}
@@ -2001,7 +2022,7 @@ export default function DashboardClient({
             }));
             setShowPricingModal(false);
             toast.success("Welcome to GetPGN Pro", {
-              description: `Pro is active instantly. ${scanUsage.limit.toLocaleString()} scans/month on your plan.`,
+              description: `Pro is active instantly. ${formatProScanAllowance(verifiedPlan)}.`,
             });
             router.refresh();
           } finally {
@@ -2791,7 +2812,8 @@ export default function DashboardClient({
                     {scanUsage.used.toLocaleString()}/
                     {scanUsage.limit.toLocaleString()}
                   </strong>{" "}
-                  scans{isPro ? "/mo" : ""}
+                  scans
+                  {isPro ? (scanUsage.periodUnit === "year" ? "/yr" : "/mo") : ""}
                 </span>
               </button>
               <span className="text-[12px] text-muted flex sm:hidden items-center gap-1.5">
@@ -3353,7 +3375,7 @@ export default function DashboardClient({
                       Unlock Pro
                     </h2>
                     <p className="text-[11px] text-paper/70 leading-relaxed">
-                      Monthly scan allowances, saved library, and shareable replays.
+                      ₹100/mo · 100 scans or ₹1,000/yr · 1,000 scans, plus saved library and shareable replays.
                     </p>
                     <button
                       onClick={() => setShowPricingModal(true)}

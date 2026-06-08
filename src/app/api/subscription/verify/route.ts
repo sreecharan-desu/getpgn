@@ -28,7 +28,10 @@ export async function POST(req: NextRequest) {
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!keyId || !keySecret) {
-      return NextResponse.json({ error: 'Payment provider is not configured.' }, { status: 503 });
+      return NextResponse.json(
+        { error: "Payments aren't available right now. Please try again later." },
+        { status: 503 },
+      );
     }
 
     const expectedSignature = crypto

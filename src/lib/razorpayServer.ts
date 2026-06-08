@@ -6,7 +6,15 @@ export type RazorpayConfig = {
   mode: 'live' | 'test';
 };
 
-/** Strip whitespace and accidental wrapping quotes from Vercel-pasted values. */
+/** User-facing copy — never mention env vars, Vercel, or key names. */
+export const PAYMENTS_UNAVAILABLE =
+  "Payments aren't available right now. Please try again later.";
+export const CHECKOUT_FAILED =
+  "We couldn't start checkout. Please try again in a few minutes.";
+export const PLAN_UNAVAILABLE =
+  "This plan isn't available right now. Please try again later.";
+
+/** Strip whitespace and accidental wrapping quotes from pasted env values. */
 export function sanitizeEnv(value: string | undefined): string {
   if (!value) return '';
   let v = value.trim();
@@ -30,12 +38,8 @@ export function readRazorpayConfig():
   const keySecret = sanitizeEnv(process.env.RAZORPAY_KEY_SECRET);
 
   if (!keyId || !keySecret) {
-    return {
-      ok: false,
-      error: isProductionDeploy()
-        ? 'Razorpay is not configured on this deployment. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Vercel → Production environment variables, then redeploy.'
-        : 'Razorpay keys are not configured.',
-    };
+    console.error('[Razorpay] Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET.');
+    return { ok: false, error: PAYMENTS_UNAVAILABLE };
   }
 
   let mode: 'live' | 'test' | null = null;
@@ -43,27 +47,18 @@ export function readRazorpayConfig():
   else if (keyId.startsWith('rzp_test_')) mode = 'test';
 
   if (!mode) {
-    return {
-      ok: false,
-      error:
-        'RAZORPAY_KEY_ID must start with rzp_live_ (production) or rzp_test_ (local sandbox).',
-    };
+    console.error('[Razorpay] RAZORPAY_KEY_ID has an invalid prefix.');
+    return { ok: false, error: PAYMENTS_UNAVAILABLE };
   }
 
   if (isProductionDeploy() && mode === 'test') {
-    return {
-      ok: false,
-      error:
-        'This deployment uses Razorpay test keys. In Vercel, set live keys (rzp_live_…) under Production environment variables — local .env is not used in prod.',
-    };
+    console.error('[Razorpay] Production deploy is using test keys.');
+    return { ok: false, error: PAYMENTS_UNAVAILABLE };
   }
 
   if (keySecret.length < 24) {
-    return {
-      ok: false,
-      error:
-        'RAZORPAY_KEY_SECRET looks truncated. Regenerate the secret in Razorpay Dashboard and paste the full value into Vercel (Production).',
-    };
+    console.error('[Razorpay] RAZORPAY_KEY_SECRET looks truncated.');
+    return { ok: false, error: PAYMENTS_UNAVAILABLE };
   }
 
   return { ok: true, config: { keyId, keySecret, mode } };
@@ -87,14 +82,15 @@ export function createRazorpayClient(config: RazorpayConfig): Razorpay {
   });
 }
 
-/** Safe diagnostics for Vercel logs — never logs secrets. */
-export function logRazorpayDiagnostics(planType?: string): void {
+/** Diagnostics for server logs only — never logs secrets. */
+export function logRazorpayDiagnostics(planType?: string, context?: string): void {
   const keyId = sanitizeEnv(process.env.RAZORPAY_KEY_ID);
   const secret = sanitizeEnv(process.env.RAZORPAY_KEY_SECRET);
   const monthly = sanitizeEnv(process.env.RAZORPAY_MONTHLY_PLAN_ID);
   const yearly = sanitizeEnv(process.env.RAZORPAY_YEARLY_PLAN_ID);
 
-  console.error('[Razorpay] Config snapshot (prod debug):', {
+  console.error('[Razorpay] Config snapshot:', {
+    context: context ?? null,
     vercelEnv: process.env.VERCEL_ENV ?? 'local',
     keyIdPrefix: keyId ? `${keyId.slice(0, 12)}…` : '(missing)',
     keyMode: keyId.startsWith('rzp_live_')
@@ -119,26 +115,18 @@ export function mapRazorpayError(error: unknown, planType?: string): { status: n
   };
 
   const code = err?.statusCode ?? 500;
-  const description = err?.error?.description ?? err?.message ?? 'Payment provider error.';
+  const description = err?.error?.description ?? err?.message ?? '';
 
   if (code === 401) {
-    logRazorpayDiagnostics(planType);
-    return {
-      status: 503,
-      message: isProductionDeploy()
-        ? 'Payment authentication failed on production. In Vercel → Production env vars, set matching live Razorpay Key ID + Secret and live plan IDs, then redeploy.'
-        : 'Payment provider authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in your .env file.',
-    };
+    logRazorpayDiagnostics(planType, 'authentication_failed');
+    return { status: 503, message: CHECKOUT_FAILED };
   }
 
   if (code === 400 && description.toLowerCase().includes('plan')) {
-    logRazorpayDiagnostics(planType);
-    return {
-      status: 503,
-      message:
-        'Subscription plan not found for this Razorpay mode. Create plans in Live mode and set RAZORPAY_MONTHLY_PLAN_ID / RAZORPAY_YEARLY_PLAN_ID on Vercel Production.',
-    };
+    logRazorpayDiagnostics(planType, 'plan_not_found');
+    return { status: 503, message: PLAN_UNAVAILABLE };
   }
 
-  return { status: 502, message: description };
+  console.error('[Razorpay] Checkout error:', { statusCode: code, description });
+  return { status: 502, message: CHECKOUT_FAILED };
 }

@@ -1,3 +1,5 @@
+import { friendlyError } from '@/lib/friendlyError';
+
 export type BillingPlan = "monthly" | "yearly";
 
 declare global {
@@ -63,7 +65,7 @@ export async function openRazorpayCheckout({
 }: OpenCheckoutOptions): Promise<void> {
   const scriptLoaded = await loadRazorpayScript();
   if (!scriptLoaded) {
-    onError("Razorpay failed to load. Check your connection and try again.");
+    onError("Checkout couldn't load. Check your connection and try again.");
     return;
   }
 
@@ -75,7 +77,7 @@ export async function openRazorpayCheckout({
 
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
-    onError(data.error ?? "We couldn't start checkout. Please try again.");
+    onError(friendlyError(data.error, "We couldn't start checkout. Please try again."));
     return;
   }
 
@@ -106,7 +108,12 @@ export async function openRazorpayCheckout({
 
         if (!verifyRes.ok) {
           const errData = (await verifyRes.json().catch(() => ({}))) as { error?: string };
-          onError(errData.error ?? "Payment received but verification failed. Contact support if charged.");
+          onError(
+            friendlyError(
+              errData.error,
+              "Payment received but we couldn't confirm it. Contact support if you were charged.",
+            ),
+          );
           return;
         }
 

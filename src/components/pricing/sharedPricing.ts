@@ -1,6 +1,6 @@
 export const PRO_CORE_FEATURES = [
-  "100 scans/month (monthly plan)",
-  "1,000 scans/month (yearly plan)",
+  "₹100/month · 100 scans/month",
+  "₹1,000/year · 1,000 scans/year",
   "Cloud library & board previews",
   "Shareable interactive replays",
   "PGN export anytime",

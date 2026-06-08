@@ -6,6 +6,7 @@ export const PRO_MONTHLY_PLAN_SCAN_LIMIT = 100;
 export const PRO_YEARLY_PLAN_SCAN_LIMIT = 1000;
 
 export type ScanTier = 'free' | 'pro';
+export type ScanPeriodUnit = 'month' | 'year';
 
 export interface ScanUsageUser extends ProAccessUser {
   scanCount: number;
@@ -20,8 +21,13 @@ export interface ScanUsage {
   limit: number;
   remaining: number;
   exhausted: boolean;
-  monthKey: string | null;
+  periodKey: string | null;
+  periodUnit: ScanPeriodUnit | null;
   planLabel: string;
+}
+
+export function isYearlyPlan(subscriptionPlan: string | null | undefined): boolean {
+  return subscriptionPlan === 'yearly';
 }
 
 export function getCurrentMonthKey(date = new Date()): string {
@@ -30,23 +36,45 @@ export function getCurrentMonthKey(date = new Date()): string {
   return `${year}-${month}`;
 }
 
+export function getCurrentYearKey(date = new Date()): string {
+  return String(date.getUTCFullYear());
+}
+
+/** Billing period key stored in `monthlyScanMonth` (YYYY-MM or YYYY). */
+export function getScanPeriodKey(
+  subscriptionPlan: string | null | undefined,
+  date = new Date(),
+): string {
+  return isYearlyPlan(subscriptionPlan) ? getCurrentYearKey(date) : getCurrentMonthKey(date);
+}
+
+export function getScanPeriodUnit(
+  subscriptionPlan: string | null | undefined,
+): ScanPeriodUnit | null {
+  if (!subscriptionPlan) return null;
+  return isYearlyPlan(subscriptionPlan) ? 'year' : 'month';
+}
+
 export function getProScanLimit(subscriptionPlan: string | null | undefined): number {
-  return subscriptionPlan === 'yearly'
+  return isYearlyPlan(subscriptionPlan)
     ? PRO_YEARLY_PLAN_SCAN_LIMIT
     : PRO_MONTHLY_PLAN_SCAN_LIMIT;
 }
 
 export function formatProScanAllowance(subscriptionPlan: string | null | undefined): string {
-  const limit = getProScanLimit(subscriptionPlan);
-  return `${limit.toLocaleString()} scans/month`;
+  if (isYearlyPlan(subscriptionPlan)) {
+    return `${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()} scans/year`;
+  }
+  return `${PRO_MONTHLY_PLAN_SCAN_LIMIT} scans/month`;
 }
 
 export function getScanUsage(user: ScanUsageUser, now = new Date()): ScanUsage {
   if (isProUser(user)) {
-    const monthKey = getCurrentMonthKey(now);
+    const periodKey = getScanPeriodKey(user.subscriptionPlan, now);
+    const periodUnit = getScanPeriodUnit(user.subscriptionPlan);
     const limit = getProScanLimit(user.subscriptionPlan);
     const used =
-      user.monthlyScanMonth === monthKey ? Math.max(0, user.monthlyScanCount) : 0;
+      user.monthlyScanMonth === periodKey ? Math.max(0, user.monthlyScanCount) : 0;
     const remaining = Math.max(0, limit - used);
 
     return {
@@ -55,9 +83,9 @@ export function getScanUsage(user: ScanUsageUser, now = new Date()): ScanUsage {
       limit,
       remaining,
       exhausted: used >= limit,
-      monthKey,
-      planLabel:
-        user.subscriptionPlan === 'yearly' ? 'Pro yearly' : 'Pro monthly',
+      periodKey,
+      periodUnit,
+      planLabel: isYearlyPlan(user.subscriptionPlan) ? 'Pro yearly' : 'Pro monthly',
     };
   }
 
@@ -71,7 +99,8 @@ export function getScanUsage(user: ScanUsageUser, now = new Date()): ScanUsage {
     limit,
     remaining,
     exhausted: used >= limit,
-    monthKey: null,
+    periodKey: null,
+    periodUnit: null,
     planLabel: 'Free',
   };
 }
@@ -96,37 +125,38 @@ export async function rollbackFreeScan(userId: string): Promise<void> {
 export async function reserveProScan(
   userId: string,
   subscriptionPlan: string | null | undefined,
-  monthKey = getCurrentMonthKey(),
+  periodKey = getScanPeriodKey(subscriptionPlan),
 ): Promise<boolean> {
   const limit = getProScanLimit(subscriptionPlan);
 
-  const sameMonth = await prisma.user.updateMany({
+  const samePeriod = await prisma.user.updateMany({
     where: {
       id: userId,
-      monthlyScanMonth: monthKey,
+      monthlyScanMonth: periodKey,
       monthlyScanCount: { lt: limit },
     },
     data: { monthlyScanCount: { increment: 1 } },
   });
-  if (sameMonth.count === 1) return true;
+  if (samePeriod.count === 1) return true;
 
-  const newMonth = await prisma.user.updateMany({
+  const newPeriod = await prisma.user.updateMany({
     where: {
       id: userId,
-      OR: [{ monthlyScanMonth: null }, { monthlyScanMonth: { not: monthKey } }],
+      OR: [{ monthlyScanMonth: null }, { monthlyScanMonth: { not: periodKey } }],
     },
-    data: { monthlyScanCount: 1, monthlyScanMonth: monthKey },
+    data: { monthlyScanCount: 1, monthlyScanMonth: periodKey },
   });
-  return newMonth.count === 1;
+  return newPeriod.count === 1;
 }
 
 export async function rollbackProScan(
   userId: string,
-  monthKey = getCurrentMonthKey(),
+  subscriptionPlan: string | null | undefined,
+  periodKey = getScanPeriodKey(subscriptionPlan),
 ): Promise<void> {
   await prisma.user
     .updateMany({
-      where: { id: userId, monthlyScanMonth: monthKey, monthlyScanCount: { gt: 0 } },
+      where: { id: userId, monthlyScanMonth: periodKey, monthlyScanCount: { gt: 0 } },
       data: { monthlyScanCount: { decrement: 1 } },
     })
     .catch((err) => console.error('[Scan Limits] Pro scan rollback failed:', err));
@@ -137,5 +167,9 @@ export function getScanLimitErrorMessage(usage: ScanUsage): string {
     return 'Scan limit exceeded. You have already used your 2 free scans. Please upgrade to a Paid plan to unlock more scans.';
   }
 
-  return `Monthly scan limit reached (${usage.limit.toLocaleString()} scans on your ${usage.planLabel.toLowerCase()} plan). Your quota resets at the start of next month.`;
+  if (usage.periodUnit === 'year') {
+    return `Yearly scan limit reached (${usage.limit.toLocaleString()} scans on your Pro yearly plan). Your quota resets on January 1.`;
+  }
+
+  return `Monthly scan limit reached (${usage.limit.toLocaleString()} scans on your Pro monthly plan). Your quota resets at the start of next month.`;
 }

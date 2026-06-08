@@ -60,7 +60,7 @@ const FREE_FEATURES = [
 ] as const;
 
 const PRO_FEATURES = [
-  { icon: InfinityIcon, label: "100–1,000 scans/month on Pro" },
+  { icon: InfinityIcon, label: "₹100/mo · 100 scans or ₹1,000/yr · 1,000 scans" },
   { icon: History, label: "Cloud library with board previews" },
   { icon: Share2, label: "Shareable interactive replays" },
   { icon: LayoutGrid, label: "5 board color themes" },
@@ -274,7 +274,7 @@ export default function GetPGNLandingPage() {
                   Never lose a game again
                 </h3>
                 <p className="mt-2 text-[14px] leading-relaxed text-paper/65">
-                  Monthly scan allowances on Pro, cloud library with board previews, shareable replays, and five board color
+                  ₹100/mo for 100 scans or ₹1,000/yr for 1,000 scans, plus cloud library, shareable replays, and five board color
                   themes.
                 </p>
               </div>

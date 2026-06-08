@@ -21,8 +21,8 @@ import {
 export { FREE_SCAN_LIMIT };
 
 const PRO_FEATURES = [
-  { icon: ScanLine, label: `${PRO_MONTHLY_PLAN_SCAN_LIMIT} scans/month (monthly plan)` },
-  { icon: ScanLine, label: `${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()} scans/month (yearly plan)` },
+  { icon: ScanLine, label: `₹100/month · ${PRO_MONTHLY_PLAN_SCAN_LIMIT} scans/month` },
+  { icon: ScanLine, label: `₹1,000/year · ${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()} scans/year` },
   { icon: History, label: 'Cloud library with board previews' },
   { icon: Share2, label: 'Shareable interactive replays' },
   { icon: Download, label: 'PGN export & download anytime' },
@@ -32,7 +32,7 @@ const PRO_FEATURES = [
 ] as const;
 
 const FREE_VS_PRO = [
-  { feature: 'Scoresheet scans', free: '2 total', pro: `${PRO_MONTHLY_PLAN_SCAN_LIMIT}/mo · ${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()}/mo` },
+  { feature: 'Scoresheet scans', free: '2 total', pro: `${PRO_MONTHLY_PLAN_SCAN_LIMIT}/mo · ${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()}/yr` },
   { feature: 'Move validation', free: true, pro: true },
   { feature: 'PGN export (session)', free: true, pro: true },
   { feature: 'Saved game library', free: false, pro: true },
@@ -66,6 +66,7 @@ interface ScanUsageMeterProps {
   limit?: number;
   tier?: ScanTier;
   planLabel?: string;
+  periodUnit?: 'month' | 'year' | null;
   onUpgrade?: () => void;
   compact?: boolean;
   className?: string;
@@ -77,6 +78,7 @@ export function ScanUsageMeter({
   limit = FREE_SCAN_LIMIT,
   tier = 'free',
   planLabel = 'Free plan',
+  periodUnit = null,
   onUpgrade,
   compact = false,
   className = '',
@@ -133,10 +135,14 @@ export function ScanUsageMeter({
       <p className="mt-3 text-[12px] leading-relaxed text-muted">
         {exhausted
           ? isPro
-            ? 'Your monthly scan quota is used up. It resets at the start of next month.'
-            : 'Upgrade to Pro for monthly scan allowances and a permanent game library.'
+            ? periodUnit === 'year'
+              ? 'Your yearly scan quota is used up. It resets on January 1.'
+              : 'Your monthly scan quota is used up. It resets at the start of next month.'
+            : 'Upgrade to Pro for scan allowances and a permanent game library.'
           : isPro
-            ? 'Monthly allowance resets on the 1st of each month.'
+            ? periodUnit === 'year'
+              ? 'Yearly allowance resets every January 1.'
+              : 'Monthly allowance resets on the 1st of each month.'
             : used === 0
               ? 'Try digitizing up to 2 scoresheets — no card required.'
               : 'Export PGN from each session. Upgrade to save games forever.'}

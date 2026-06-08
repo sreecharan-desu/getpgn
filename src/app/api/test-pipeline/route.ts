@@ -8,7 +8,7 @@ import {
   getScanUsage,
   reserveFreeScan,
   reserveProScan,
-  getCurrentMonthKey,
+  getScanPeriodKey,
 } from '@/lib/scanLimits';
 import { validateChessMoves } from '@/lib/chess-validator';
 import { isDevRouteAllowed, devRouteBlockedResponse } from '@/lib/security';
@@ -56,7 +56,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (isPro) {
-      const reserved = await reserveProScan(user.id, user.subscriptionPlan, getCurrentMonthKey());
+      const reserved = await reserveProScan(
+        user.id,
+        user.subscriptionPlan,
+        getScanPeriodKey(user.subscriptionPlan),
+      );
       if (!reserved) {
         return NextResponse.json({
           error: getScanLimitErrorMessage(getScanUsage(user)),

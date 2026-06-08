@@ -6,8 +6,8 @@ import { validateChessMoves } from '@/lib/chess-validator';
 import { apiError, validateImageUpload } from '@/lib/security';
 import { rateLimitByIp } from '@/lib/rateLimit';
 import {
-  getCurrentMonthKey,
   getScanLimitErrorMessage,
+  getScanPeriodKey,
   getScanUsage,
   reserveFreeScan,
   reserveProScan,
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
   const apiStartTime = Date.now();
   let scanReservedForUserId: string | null = null;
   let scanReservedAsPro = false;
-  let scanReservedMonthKey: string | null = null;
+  let scanReservedPeriodKey: string | null = null;
+  let scanReservedPlan: string | null | undefined = null;
 
   try {
     const auth = await requireVerifiedUser();
@@ -52,8 +53,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (isPro) {
-      const monthKey = getCurrentMonthKey();
-      const reserved = await reserveProScan(user.id, user.subscriptionPlan, monthKey);
+      const periodKey = getScanPeriodKey(user.subscriptionPlan);
+      const reserved = await reserveProScan(user.id, user.subscriptionPlan, periodKey);
       if (!reserved) {
         return NextResponse.json(
           {
@@ -65,7 +66,8 @@ export async function POST(req: NextRequest) {
       }
       scanReservedForUserId = user.id;
       scanReservedAsPro = true;
-      scanReservedMonthKey = monthKey;
+      scanReservedPeriodKey = periodKey;
+      scanReservedPlan = user.subscriptionPlan;
     } else {
       const reserved = await reserveFreeScan(user.id);
       if (!reserved) {
@@ -218,7 +220,11 @@ UNCERTAINTY:
     console.error('[Extract API] ── END (error) ────────────────────────────────');
     if (scanReservedForUserId) {
       if (scanReservedAsPro) {
-        await rollbackProScan(scanReservedForUserId, scanReservedMonthKey ?? getCurrentMonthKey());
+        await rollbackProScan(
+          scanReservedForUserId,
+          scanReservedPlan,
+          scanReservedPeriodKey ?? getScanPeriodKey(scanReservedPlan),
+        );
       } else {
         await rollbackFreeScan(scanReservedForUserId);
       }
