@@ -17,7 +17,6 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FeedbackModal } from "@/components/ui/FeedbackModal";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { UserMenu } from "@/components/ui/UserMenu";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { LegalLink, LegalTrustLinks } from "@/components/legal/PolicyFooter";
 import { LEGAL } from "@/lib/legal";
 import BoardThumbnail from "@/components/ui/BoardThumbnail";
@@ -2880,18 +2879,26 @@ export default function DashboardClient({
                   {isPro ? (scanUsage.periodUnit === "year" ? "/yr" : "/mo") : ""}
                 </span>
               </button>
-              <span className="text-[12px] text-muted flex sm:hidden items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => !isPro && setShowPricingModal(true)}
+                className={`text-[12px] text-muted flex sm:hidden items-center gap-1.5 ${
+                  !isPro ? "cursor-pointer rounded-full px-2 py-1 -mr-1 hover:bg-surface-2" : ""
+                }`}
+                title={!isPro ? "View plans" : "Scan usage"}
+                aria-label={!isPro ? "View upgrade plans" : "Scan usage"}
+              >
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-ink/70" />
                 <strong className="text-ink gp-nums">
                   {scanUsage.used.toLocaleString()}/
                   {scanUsage.limit.toLocaleString()}
                 </strong>
-              </span>
+              </button>
               {!isPro && (
                 <button
                   onClick={() => setShowPricingModal(true)}
                   disabled={billingLoading}
-                  className="shrink-0 h-9 py-1.5 px-3 sm:px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-lg text-[13px] whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="hidden sm:flex shrink-0 h-9 py-1.5 px-3 sm:px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-lg text-[13px] whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 items-center gap-1.5"
                 >
                   <QueenMark className="w-3.5 h-3.5" />
                   Upgrade
@@ -2926,7 +2933,6 @@ export default function DashboardClient({
               isPro={!!isPro}
               onAccount={() => setActiveTab("account")}
             />
-            <ThemeToggle className="hidden md:grid shrink-0" />
             <span
               className="hidden md:block h-6 w-px bg-line-strong"
               aria-hidden="true"

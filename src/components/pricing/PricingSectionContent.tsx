@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { QueenMark } from "@/components/ui/Logo";
 import { Spinner } from "@/components/ui/Spinner";
 import { RazorpayTrustBar } from "@/components/ui/RazorpayLogo";
@@ -75,6 +75,28 @@ export function PricingSectionContent({
   const gridClass = isModal
     ? "-mx-1 mt-6 pb-2 md:mx-0 md:pb-0"
     : "-mx-1 mx-auto mt-10 w-full max-w-5xl gap-5 pb-2 sm:mt-12 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:pb-0";
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollHint, setShowScrollHint] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const overflow = el.scrollWidth - el.clientWidth > 12;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 12;
+      setShowScrollHint(overflow && !atEnd);
+    };
+
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [isModal]);
 
   const renderPriceRow = (
     price: React.ReactNode,
@@ -194,9 +216,30 @@ export function PricingSectionContent({
         ) : null}
       </div>
 
-      <div
-        className={`landing-pricing-scroll flex snap-x snap-mandatory overflow-x-auto ${gridClass}`}
-      >
+      <div className="relative md:contents">
+        <p
+          className={`mb-2 flex items-center justify-center gap-1.5 text-[12px] md:hidden ${
+            isModal ? "pricing-modal-scroll-hint" : "text-muted"
+          }`}
+          aria-hidden="true"
+        >
+          Swipe to compare plans
+          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+        </p>
+
+        {showScrollHint ? (
+          <div
+            className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-12 md:hidden ${
+              isModal ? "pricing-scroll-fade--modal" : "pricing-scroll-fade--light"
+            }`}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        <div
+          ref={scrollRef}
+          className={`landing-pricing-scroll flex snap-x snap-mandatory overflow-x-auto ${gridClass}`}
+        >
         <article className={cardBase}>
           <h3 className={`${titleSize} font-medium text-ink`}>Free</h3>
           <p className={`mt-0.5 ${descSize} text-muted`}>Perfect for your next tournament round</p>
@@ -233,6 +276,7 @@ export function PricingSectionContent({
           {renderPriceRow(priceBlock("₹100", "/ month"), proMonthlyCta)}
           <ProFeatureList className={`${listMt} flex-1`} compact={false} />
         </article>
+        </div>
       </div>
 
       <div

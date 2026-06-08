@@ -27,10 +27,10 @@ export const PRICING_CARD_HIGHLIGHT =
 
 /** Narrow snap targets + tall equal columns in the dashboard modal. */
 export const PRICING_CARD_MODAL_BASE =
-  "pricing-card pricing-card--modal pricing-card-layout flex h-full w-full min-w-[min(82vw,300px)] flex-shrink-0 snap-center flex-col md:min-w-0";
+  "pricing-card pricing-card--modal pricing-card-layout flex h-full w-full min-w-[min(82vw,300px)] flex-shrink-0 snap-center flex-col p-6 sm:p-8 md:min-w-0";
 
 export const PRICING_CARD_MODAL_HIGHLIGHT =
-  "pricing-card pricing-card--featured pricing-card--modal pricing-card-layout relative flex h-full w-full min-w-[min(82vw,300px)] flex-shrink-0 snap-center flex-col md:min-w-0";
+  "pricing-card pricing-card--featured pricing-card--modal pricing-card-layout relative flex h-full w-full min-w-[min(82vw,300px)] flex-shrink-0 snap-center flex-col p-6 sm:p-8 md:min-w-0";
 
 export function getFreeFeatures(scanLimit: number) {
   return [

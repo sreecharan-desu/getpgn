@@ -1,35 +1,102 @@
 import { Resend } from 'resend';
+import {
+  describeResendError,
+  getAppUrl,
+  getEmailFromAddress,
+  getResendApiKey,
+  logEmailMisconfiguration,
+} from '@/lib/emailConfig';
 
-// Initialize Resend. If key is missing during build, fail gracefully or log a warning.
-const apiKey = process.env.RESEND_API_KEY || '';
-export const resend = apiKey ? new Resend(apiKey) : null;
+let resendClient: Resend | null = null;
+
+function getResendClient(): Resend | null {
+  const apiKey = getResendApiKey();
+  if (!apiKey) {
+    logEmailMisconfiguration();
+    return null;
+  }
+  if (!resendClient) {
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+}
+
+type SendResult = { success: boolean; data?: unknown; error?: string };
+
+async function sendEmail(payload: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<SendResult> {
+  const client = getResendClient();
+  const from = getEmailFromAddress();
+
+  if (!client) {
+    console.warn('[Email Utility] RESEND_API_KEY is not configured. Logging email contents instead:');
+    console.warn(`From: ${from}`);
+    console.warn(`To: ${payload.to}`);
+    console.warn(`Subject: ${payload.subject}`);
+    console.warn(`Text: ${payload.text.slice(0, 200)}…`);
+    return { success: true, error: 'Resend not configured, logged instead.' };
+  }
+
+  let lastError: { name?: string; message?: string; statusCode?: number | null } | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data, error } = await client.emails.send({
+        from,
+        to: payload.to,
+        subject: payload.subject,
+        text: payload.text,
+        html: payload.html,
+      });
+
+      if (!error) {
+        return { success: true, data };
+      }
+
+      lastError = error;
+      console.error('[Email Utility] Resend send error:', JSON.stringify(error));
+
+      if (error.name === 'validation_error') {
+        break;
+      }
+
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[Email Utility] Failed to send email:', err);
+      lastError = { name: 'application_error', message: errorMsg, statusCode: null };
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        continue;
+      }
+    }
+  }
+
+  const described = lastError ? describeResendError(lastError) : 'Email send failed.';
+  return { success: false, error: described };
+}
 
 /**
  * Sends a password reset email to the specified user email with the given token.
- * 
- * @param email Recipient email address
- * @param token Password reset token
  */
-export async function sendPasswordResetEmail(email: string, token: string): Promise<{ success: boolean; data?: unknown; error?: string }> {
-  try {
-    const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    const resetUrl = `${appUrl}/reset-password?token=${token}`;
+export async function sendPasswordResetEmail(
+  email: string,
+  token: string,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const resetUrl = `${appUrl}/reset-password?token=${token}`;
 
-    if (!resend) {
-      console.warn('[Email Utility] RESEND_API_KEY is not configured. Logging email contents instead:');
-      console.warn(`To: ${email}`);
-      console.warn(`Subject: Reset your GetPGN password`);
-      console.warn(`Link: ${resetUrl}`);
-      return { success: true, error: 'Resend not configured, logged instead.' };
-    }
-
-    const { data, error } = await resend.emails.send({
-      from,
-      to: email,
-      subject: 'Reset your GetPGN password',
-      text: `Click the link below to reset your password.\n\n${resetUrl}\n\nThis link expires in 15 minutes.\n\nIf you did not request a password reset, ignore this email.`,
-      html: `
+  return sendEmail({
+    to: email,
+    subject: 'Reset your GetPGN password',
+    text: `Click the link below to reset your password.\n\n${resetUrl}\n\nThis link expires in 15 minutes.\n\nIf you did not request a password reset, ignore this email.`,
+    html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px; background-color: #ffffff; color: #111111;">
           <h2 style="color: #000000; margin-top: 0; font-weight: 800; tracking-tight: -0.025em;">Reset your GetPGN password</h2>
           <p style="font-size: 14px; color: #444444;">Click the button below to reset your password. This link will expire in 15 minutes.</p>
@@ -42,50 +109,24 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
           <p style="color: #999999; font-size: 11px; margin-bottom: 0;">If you did not request a password reset, you can safely ignore this email.</p>
         </div>
       `,
-    });
-
-    if (error) {
-      console.error('[Email Utility] Resend send error:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, data };
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[Email Utility] Failed to send email:', err);
-    return { success: false, error: errorMsg };
-  }
+  });
 }
 
 /**
  * Sends an email verification link for new account signups.
- *
- * @param email Recipient email address
- * @param token Verification token
  */
 export async function sendVerificationEmail(
   email: string,
   token: string,
-): Promise<{ success: boolean; data?: unknown; error?: string }> {
-  try {
-    const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    const verifyUrl = `${appUrl}/verify-email?token=${token}`;
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const verifyUrl = `${appUrl}/verify-email?token=${token}`;
 
-    if (!resend) {
-      console.warn('[Email Utility] RESEND_API_KEY is not configured. Logging email contents instead:');
-      console.warn(`To: ${email}`);
-      console.warn(`Subject: Verify your GetPGN email`);
-      console.warn(`Link: ${verifyUrl}`);
-      return { success: true, error: 'Resend not configured, logged instead.' };
-    }
-
-    const { data, error } = await resend.emails.send({
-      from,
-      to: email,
-      subject: 'Verify your GetPGN email',
-      text: `Thanks for signing up for GetPGN.\n\nClick the link below to verify your email address:\n\n${verifyUrl}\n\nThis link expires in 10 minutes.\n\nIf you did not create an account, you can ignore this email.`,
-      html: `
+  return sendEmail({
+    to: email,
+    subject: 'Verify your GetPGN email',
+    text: `Thanks for signing up for GetPGN.\n\nClick the link below to verify your email address:\n\n${verifyUrl}\n\nThis link expires in 10 minutes.\n\nIf you did not create an account, you can ignore this email.`,
+    html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px; background-color: #ffffff; color: #111111;">
           <h2 style="color: #000000; margin-top: 0; font-weight: 800; tracking-tight: -0.025em;">Verify your GetPGN email</h2>
           <p style="font-size: 14px; color: #444444;">Thanks for signing up. Click the button below to verify your email address. This link will expire in 10 minutes.</p>
@@ -98,17 +139,5 @@ export async function sendVerificationEmail(
           <p style="color: #999999; font-size: 11px; margin-bottom: 0;">If you did not create a GetPGN account, you can safely ignore this email.</p>
         </div>
       `,
-    });
-
-    if (error) {
-      console.error('[Email Utility] Resend send error:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, data };
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[Email Utility] Failed to send email:', err);
-    return { success: false, error: errorMsg };
-  }
+  });
 }
