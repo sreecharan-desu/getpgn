@@ -38,7 +38,7 @@ export default async function SharePage({ params }: PageProps) {
               href="/"
               className="group/logo -ml-1.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2"
             >
-              <Logo showMark={false} wordmarkSize="md" />
+              <Logo wordmarkSize="md" />
             </Link>
           </div>
         </header>

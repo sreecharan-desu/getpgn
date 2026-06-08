@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Logo } from "./Logo";
-import { QueenMascot } from "./QueenMascot";
 
 interface StatusShellProps {
   eyebrow?: string;
@@ -50,8 +49,7 @@ export function StatusShell({
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-16 sm:py-20">
         <div className="gp-fade-up flex w-full max-w-[400px] flex-col items-center text-center">
-          <QueenMascot interactive className="!max-w-[120px] sm:!max-w-[132px]" />
-          <Logo size={28} className="mt-8" />
+          <Logo wordmarkSize="lg" />
           {eyebrow ? (
             <p className="mt-6 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-2">
               {eyebrow}

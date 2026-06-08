@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, ChevronRight } from "lucide-react";
-import { QueenMark } from "@/components/ui/Logo";
 import { Spinner } from "@/components/ui/Spinner";
 import { RazorpayTrustBar } from "@/components/ui/RazorpayLogo";
 import { LegalLink } from "@/components/legal/PolicyFooter";
@@ -72,6 +71,8 @@ export function PricingSectionContent({
 
   const cardBase = isModal ? PRICING_CARD_MODAL_BASE : PRICING_CARD_BASE;
   const cardHighlight = isModal ? PRICING_CARD_MODAL_HIGHLIGHT : PRICING_CARD_HIGHLIGHT;
+  /** Free plan stays in desktop grid; mobile scroll focuses on Pro tiers. */
+  const freeCardVisibility = isModal ? "hidden md:flex" : "hidden lg:flex";
   const gridClass = isModal
     ? "-mx-1 mt-6 pb-2 md:mx-0 md:pb-0"
     : "-mx-1 mx-auto mt-10 w-full max-w-5xl gap-5 pb-2 sm:mt-12 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:pb-0";
@@ -132,7 +133,6 @@ export function PricingSectionContent({
         </>
       ) : (
         <>
-          <QueenMark className="h-3 w-3" />
           Get started
         </>
       )}
@@ -144,7 +144,6 @@ export function PricingSectionContent({
       onClick={() => storePendingUpgrade("monthly")}
       className={ctaClass("secondary")}
     >
-      <QueenMark className="h-3 w-3" />
       Get started
     </Link>
   );
@@ -164,7 +163,6 @@ export function PricingSectionContent({
         </>
       ) : (
         <>
-          <QueenMark className="h-3 w-3" />
           Get started
         </>
       )}
@@ -176,7 +174,6 @@ export function PricingSectionContent({
       onClick={() => storePendingUpgrade("yearly")}
       className={ctaClass("primary")}
     >
-      <QueenMark className="h-3 w-3" />
       Get started
     </Link>
   );
@@ -240,7 +237,7 @@ export function PricingSectionContent({
           ref={scrollRef}
           className={`landing-pricing-scroll flex snap-x snap-mandatory overflow-x-auto ${gridClass}`}
         >
-        <article className={cardBase}>
+        <article className={`${cardBase} ${freeCardVisibility}`}>
           <h3 className={`${titleSize} font-medium text-ink`}>Free</h3>
           <p className={`mt-0.5 ${descSize} text-muted`}>Perfect for your next tournament round</p>
           {renderPriceRow(priceBlock("₹0", "forever"), freeCta)}

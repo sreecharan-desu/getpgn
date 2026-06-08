@@ -32,7 +32,7 @@ export const AuthShell: React.FC<AuthShellProps> = ({
       <main className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm gp-fade-up">
           <div className="mb-7 text-center">
-            <Logo size={28} tile className="mx-auto mb-5" showWordmark />
+            <Logo wordmarkSize="md" className="mx-auto mb-5" />
             <h1 className="text-[22px] font-semibold tracking-tight text-ink">{title}</h1>
             {subtitle && <p className="mt-1.5 text-[13px] text-muted">{subtitle}</p>}
           </div>

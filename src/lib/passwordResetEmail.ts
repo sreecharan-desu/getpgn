@@ -38,10 +38,13 @@ export async function issuePasswordResetEmail(
   });
 
   const emailResult = await sendPasswordResetEmail(email, token);
+  if (!emailResult.success) {
+    console.error(`[Password Reset] Resend failed for ${email}:`, emailResult.error);
+  }
   return { success: emailResult.success, error: emailResult.error };
 }
 
-/** Schedule reset email after the HTTP response — same pattern as verification emails. */
+/** Schedule reset email after the HTTP response — same pattern as verification email. */
 export function queuePasswordResetEmail(userId: string, email: string): void {
   after(() => {
     void issuePasswordResetEmail(userId, email).catch((err) => {

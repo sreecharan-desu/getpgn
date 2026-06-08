@@ -12,7 +12,7 @@ import {
 } from "@/components/ChessBoard";
 import { MoveList, Turn } from "@/components/MoveList";
 import { ExportPanel } from "@/components/ExportPanel";
-import { Logo, QueenMark } from "@/components/ui/Logo";
+import { Logo } from "@/components/ui/Logo";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FeedbackModal } from "@/components/ui/FeedbackModal";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -1293,7 +1293,6 @@ export default function DashboardClient({
                   onClick={() => setShowPricingModal(true)}
                   className="w-full py-2.5 px-3 bg-ink hover:bg-ink-soft text-paper rounded-lg text-[13px] font-bold transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <QueenMark className="w-3 h-3" />
                   Unlock History
                 </button>
               </div>
@@ -1350,7 +1349,6 @@ export default function DashboardClient({
               onClick={() => setShowPricingModal(true)}
               className="btn-primary btn-sm shrink-0 cursor-pointer"
             >
-              <QueenMark className="h-3 w-3" />
               View plans
             </button>
           )}
@@ -2427,7 +2425,6 @@ export default function DashboardClient({
                   onClick={() => setShowPricingModal(true)}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-2 text-[12px] font-bold text-paper transition-all hover:bg-ink-soft active:scale-[0.98] cursor-pointer"
                 >
-                  <QueenMark className="h-3.5 w-3.5" />
                   View Pro plans
                 </button>
               )}
@@ -2458,7 +2455,7 @@ export default function DashboardClient({
             <div className="px-4 sm:px-5 py-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-2 items-center">
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="grid place-items-center w-8 h-8 rounded-lg bg-ink text-paper shrink-0">
-                  <QueenMark className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-ink truncate">
@@ -2550,7 +2547,6 @@ export default function DashboardClient({
               Plan
             </dt>
             <dd className="font-semibold text-ink flex items-center gap-1 mt-0.5">
-              <QueenMark className="w-3 h-3" />
               Pro · {user.subscriptionPlan || "paid"}
             </dd>
           </div>
@@ -2649,7 +2645,7 @@ export default function DashboardClient({
               <>
                 <div className="px-4 sm:px-5 py-2.5 grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1.5 items-center">
                   <div className="flex items-center gap-2 min-w-0">
-                    <QueenMark className="w-3.5 h-3.5 text-ink shrink-0" />
+                    <Sparkles className="w-3.5 h-3.5 text-ink shrink-0" />
                     <span className="text-[12px] font-medium text-ink truncate">
                       GetPGN Pro — {cycle}
                     </span>
@@ -2829,7 +2825,7 @@ export default function DashboardClient({
               title="Dashboard"
               aria-label="Go to dashboard"
             >
-              <Logo showMark={false} wordmarkSize="md" />
+              <Logo wordmarkSize="md" />
             </button>
           </div>
           <div className="flex min-w-0 items-center gap-2 sm:gap-3.5">
@@ -2900,7 +2896,6 @@ export default function DashboardClient({
                   disabled={billingLoading}
                   className="hidden sm:flex shrink-0 h-9 py-1.5 px-3 sm:px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-lg text-[13px] whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 items-center gap-1.5"
                 >
-                  <QueenMark className="w-3.5 h-3.5" />
                   Upgrade
                 </button>
               )}
@@ -3436,12 +3431,8 @@ export default function DashboardClient({
               <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start shrink-0">
                 {renderScanUsageMeter({ compact: true })}
                 <section className="relative overflow-hidden bg-ink text-paper rounded-2xl p-4 gp-fade-up">
-                  <div className="absolute -right-4 -top-6 opacity-[0.08] pointer-events-none">
-                    <QueenMark className="w-28 h-28" />
-                  </div>
                   <div className="relative space-y-2.5">
-                    <h2 className="font-extrabold text-[15px] tracking-tight flex items-center gap-2">
-                      <QueenMark className="w-4 h-4" />
+                    <h2 className="font-extrabold text-[15px] tracking-tight">
                       Unlock Pro
                     </h2>
                     <p className="text-[11px] text-paper/70 leading-relaxed">
@@ -3473,7 +3464,7 @@ export default function DashboardClient({
                       className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
                       title="Pro member"
                     >
-                      <QueenMark className="w-2.5 h-2.5 text-ink" />
+                      <Sparkles className="w-2.5 h-2.5 text-ink" />
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -3482,7 +3473,6 @@ export default function DashboardClient({
                     </h1>
                     <div className="mt-1 flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2 rounded-full bg-ink text-paper">
-                        <QueenMark className="w-2.5 h-2.5" />
                         GetPGN Pro
                       </span>
                       {user.subscriptionPlan && (

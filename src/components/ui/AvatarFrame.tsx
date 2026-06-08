@@ -1,7 +1,4 @@
-"use client";
-
 import React from "react";
-import { QueenMark } from "./Logo";
 
 interface AvatarFrameProps {
   isPro?: boolean;
@@ -9,7 +6,7 @@ interface AvatarFrameProps {
   className?: string;
 }
 
-/** Pro members get a gradient ring + queen badge; free users render plain. */
+/** Pro members get a gradient ring + badge; free users render plain. */
 export function AvatarFrame({ isPro, children, className = "" }: AvatarFrameProps) {
   if (!isPro) {
     return <span className={`inline-flex shrink-0 ${className}`}>{children}</span>;
@@ -27,7 +24,7 @@ export function AvatarFrame({ isPro, children, className = "" }: AvatarFrameProp
         className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full border border-line-strong bg-ink text-paper shadow-[var(--shadow-soft)]"
         title="GetPGN Pro"
       >
-        <QueenMark className="h-2 w-2" />
+        <span className="text-[8px] font-bold leading-none">P</span>
       </span>
     </span>
   );

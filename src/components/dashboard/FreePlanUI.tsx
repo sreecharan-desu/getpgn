@@ -10,7 +10,6 @@ import {
   PenLine,
   ScanLine,
 } from 'lucide-react';
-import { QueenMark } from '@/components/ui/Logo';
 import {
   FREE_SCAN_LIMIT,
   PRO_MONTHLY_PLAN_SCAN_LIMIT,
@@ -156,7 +155,6 @@ export function ScanUsageMeter({
             compact ? 'py-2.5 text-[12px]' : 'py-3 text-[13px]'
           }`}
         >
-          <QueenMark className="h-3.5 w-3.5" />
           {exhausted ? 'Upgrade to continue' : 'View Pro plans'}
         </button>
       )}

@@ -20,7 +20,7 @@ export function getEmailFromAddress(): string {
 
   const appUrl = getAppUrl();
   if (appUrl.includes('getpgn.in')) {
-    return 'GetPGN <noreply@getpgn.in>';
+    return 'GetPGN <support@mail.getpgn.in>';
   }
 
   return 'GetPGN <onboarding@resend.dev>';
@@ -35,7 +35,7 @@ export function logEmailMisconfiguration(): void {
 
   if (process.env.NODE_ENV === 'production' && !process.env.EMAIL_FROM?.trim()) {
     console.warn(
-      '[Email] EMAIL_FROM is not set. Using default sender — verify getpgn.in in Resend and set EMAIL_FROM=GetPGN <noreply@getpgn.in> on Vercel.',
+      '[Email] EMAIL_FROM is not set. Using default sender — verify mail.getpgn.in in Resend and set EMAIL_FROM=GetPGN <support@mail.getpgn.in> on Vercel.',
     );
   }
 }
@@ -57,7 +57,11 @@ export function describeResendError(error: {
   }
 
   if (name === 'validation_error' && message.includes('from')) {
-    return `${message} Fix: set EMAIL_FROM to a verified domain address, e.g. GetPGN <noreply@getpgn.in>.`;
+    return `${message} Fix: set EMAIL_FROM to a verified domain address, e.g. GetPGN <support@mail.getpgn.in>.`;
+  }
+
+  if (name === 'application_error' && message.includes('could not be resolved')) {
+    return `${message} Fix: ensure Vercel can reach api.resend.com and RESEND_API_KEY is valid.`;
   }
 
   return message;

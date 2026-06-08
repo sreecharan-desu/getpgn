@@ -1,4 +1,3 @@
-import { Resend } from 'resend';
 import {
   describeResendError,
   getAppUrl,
@@ -7,21 +6,16 @@ import {
   logEmailMisconfiguration,
 } from '@/lib/emailConfig';
 
-let resendClient: Resend | null = null;
-
-function getResendClient(): Resend | null {
-  const apiKey = getResendApiKey();
-  if (!apiKey) {
-    logEmailMisconfiguration();
-    return null;
-  }
-  if (!resendClient) {
-    resendClient = new Resend(apiKey);
-  }
-  return resendClient;
-}
+const RESEND_API_URL = 'https://api.resend.com/emails';
+const RESEND_TIMEOUT_MS = 20_000;
 
 type SendResult = { success: boolean; data?: unknown; error?: string };
+
+type ResendApiError = {
+  name?: string;
+  message?: string;
+  statusCode?: number;
+};
 
 async function sendEmail(payload: {
   to: string;
@@ -29,10 +23,11 @@ async function sendEmail(payload: {
   text: string;
   html: string;
 }): Promise<SendResult> {
-  const client = getResendClient();
+  const apiKey = getResendApiKey();
   const from = getEmailFromAddress();
 
-  if (!client) {
+  if (!apiKey) {
+    logEmailMisconfiguration();
     console.warn('[Email Utility] RESEND_API_KEY is not configured. Logging email contents instead:');
     console.warn(`From: ${from}`);
     console.warn(`To: ${payload.to}`);
@@ -41,44 +36,77 @@ async function sendEmail(payload: {
     return { success: true, error: 'Resend not configured, logged instead.' };
   }
 
-  let lastError: { name?: string; message?: string; statusCode?: number | null } | null = null;
+  let lastError: ResendApiError | null = null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RESEND_TIMEOUT_MS);
+
     try {
-      const { data, error } = await client.emails.send({
-        from,
-        to: payload.to,
-        subject: payload.subject,
-        text: payload.text,
-        html: payload.html,
+      const response = await fetch(RESEND_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': 'getpgn-email/1.0',
+        },
+        body: JSON.stringify({
+          from,
+          to: [payload.to],
+          subject: payload.subject,
+          html: payload.html,
+          text: payload.text,
+        }),
+        signal: controller.signal,
+        cache: 'no-store',
       });
 
-      if (!error) {
-        return { success: true, data };
+      const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+
+      if (response.ok) {
+        return { success: true, data: body };
       }
 
-      lastError = error;
-      console.error('[Email Utility] Resend send error:', JSON.stringify(error));
+      const apiError = (body as { name?: string; message?: string }) ?? {};
+      lastError = {
+        name: apiError.name ?? 'application_error',
+        message: apiError.message ?? response.statusText ?? 'Resend API error',
+        statusCode: response.status,
+      };
+      console.error(
+        `[Email Utility] Resend API ${response.status}:`,
+        JSON.stringify(body),
+      );
 
-      if (error.name === 'validation_error') {
+      if (lastError.name === 'validation_error') {
         break;
       }
-
-      if (attempt === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-      }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[Email Utility] Failed to send email:', err);
-      lastError = { name: 'application_error', message: errorMsg, statusCode: null };
-      if (attempt === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        continue;
-      }
+      const message =
+        err instanceof Error && err.name === 'AbortError'
+          ? `Resend request timed out after ${RESEND_TIMEOUT_MS / 1000}s`
+          : err instanceof Error
+            ? err.message
+            : 'Unknown fetch error';
+      console.error('[Email Utility] Resend fetch failed:', err);
+      lastError = { name: 'application_error', message, statusCode: undefined };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
-  const described = lastError ? describeResendError(lastError) : 'Email send failed.';
+  const described = lastError
+    ? describeResendError({
+        name: lastError.name,
+        message: lastError.message,
+        statusCode: lastError.statusCode ?? null,
+      })
+    : 'Email send failed.';
   return { success: false, error: described };
 }
 

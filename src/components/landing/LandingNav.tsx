@@ -14,7 +14,7 @@ export function LandingNav() {
           aria-label="GetPGN home"
           className="group/logo -ml-1.5 shrink-0 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2"
         >
-          <Logo showMark={false} wordmarkSize="md" />
+          <Logo wordmarkSize="md" />
         </Link>
         <div className="flex items-center gap-2.5">
           <ThemeToggle />

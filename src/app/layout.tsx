@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Audiowide, Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
@@ -15,6 +15,13 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
+  display: "swap",
+});
+
+const audiowide = Audiowide({
+  variable: "--font-audiowide",
+  subsets: ["latin"],
+  weight: "400",
   display: "swap",
 });
 
@@ -65,7 +72,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${audiowide.variable} antialiased`}
         style={{ fontFamily: "var(--font-geist-sans)" }}
       >
         {children}

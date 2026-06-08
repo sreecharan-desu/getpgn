@@ -20,8 +20,7 @@ import {
   LayoutGrid,
   Heart,
 } from "lucide-react";
-import { Logo, QueenMark } from "@/components/ui/Logo";
-import { QueenMascot } from "@/components/ui/QueenMascot";
+import { Logo } from "@/components/ui/Logo";
 import BoardThumbnail from "@/components/ui/BoardThumbnail";
 import { FREE_SCAN_LIMIT } from "@/components/dashboard/FreePlanUI";
 import { LandingNav } from "@/components/landing/LandingNav";
@@ -187,9 +186,6 @@ export default function GetPGNLandingPage() {
           </div>
 
           <div className="gp-fade-up [animation-delay:80ms]">
-            <div className="mb-6 flex justify-center lg:justify-end">
-              <QueenMascot interactive className="!max-w-[120px] sm:!max-w-[140px]" />
-            </div>
             <ProductPreview />
           </div>
         </div>
@@ -265,9 +261,6 @@ export default function GetPGNLandingPage() {
 
           {/* Pro highlight strip */}
           <div className="relative mt-10 overflow-hidden rounded-[24px] bg-ink px-6 py-8 sm:px-8 sm:py-9">
-            <div className="pointer-events-none absolute -right-8 -top-10 opacity-[0.08]" aria-hidden="true">
-              <QueenMark className="h-48 w-48 text-paper" />
-            </div>
             <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
               <div className="max-w-md">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paper/50">Pro unlocks</p>
@@ -280,7 +273,7 @@ export default function GetPGNLandingPage() {
                 </p>
               </div>
               <ul className="grid gap-2.5 sm:grid-cols-2 lg:gap-x-8">
-                {PRO_FEATURES.map(({ icon: Icon, label }) => (
+                {PRO_FEATURES.map(({ label }) => (
                   <li key={label} className="flex items-center gap-2.5 text-[13px] text-paper/85">
                     <Check className="h-4 w-4 shrink-0 text-paper/60" strokeWidth={2.5} />
                     {label}
@@ -346,7 +339,7 @@ export default function GetPGNLandingPage() {
             href="/"
             className="group/logo inline-flex rounded-lg transition-opacity hover:opacity-90"
           >
-            <Logo showMark={false} wordmarkSize="sm" />
+            <Logo wordmarkSize="sm" />
           </Link>
             <span className="text-[12px] text-muted-2">Chess scoresheet digitizer</span>
           </div>

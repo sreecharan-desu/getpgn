@@ -243,7 +243,7 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
       <header className="sticky top-0 z-40 border-b border-line bg-paper/85 px-5 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between">
           <Link href="/" className="group/logo inline-flex rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2">
-            <Logo showMark={false} wordmarkSize="md" />
+            <Logo wordmarkSize="md" />
           </Link>
           <Link href="/" className="btn-primary btn-sm">
             Create your own <ArrowUpRight className="h-3.5 w-3.5" />

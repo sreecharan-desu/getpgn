@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { QueenMark } from "@/components/ui/Logo";
+import { ScanLine } from "lucide-react";
 import { lockBodyScroll, unlockBodyScroll } from "@/lib/bodyScrollLock";
 
 const CHESS_PIECES = ["♔", "♕", "♖", "♗", "♘", "♙"] as const;
@@ -140,7 +140,7 @@ export function ExtractingOverlay({
             className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-xl bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
             aria-hidden
           >
-            <QueenMark className="h-4 w-4" />
+            <ScanLine className="h-4 w-4" />
           </span>
         </div>
 

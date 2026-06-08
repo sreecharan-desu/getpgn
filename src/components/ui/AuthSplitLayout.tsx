@@ -4,7 +4,6 @@ import React from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Logo } from "./Logo";
-import { QueenMascot } from "./QueenMascot";
 
 interface AuthSplitLayoutProps {
   title: string;
@@ -41,7 +40,7 @@ export const AuthSplitLayout: React.FC<AuthSplitLayoutProps> = ({
         <aside className="relative hidden overflow-hidden border-r border-line lg:flex lg:flex-col lg:items-center lg:justify-center">
           <div className="gpq-backdrop" aria-hidden="true" />
           <div className="relative z-10 flex w-full max-w-md flex-col items-center px-10">
-            <QueenMascot interactive />
+            <Logo wordmarkSize="lg" />
             <div className="mt-8 text-center">
               <h2 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
                 {panelHeadline}
@@ -56,13 +55,9 @@ export const AuthSplitLayout: React.FC<AuthSplitLayoutProps> = ({
 
         <main className="flex items-center justify-center px-4 py-10 sm:px-6">
           <div className="w-full max-w-[400px] gp-fade-up">
-            <div className="mb-4 lg:hidden">
-              <QueenMascot interactive className="!max-w-[132px]" />
-            </div>
-
             <div className="rounded-[20px] border border-line bg-paper p-7 shadow-[var(--shadow-pop)] sm:p-8">
               <div className="mb-6 flex flex-col items-center text-center">
-                <Logo size={30} />
+                <Logo wordmarkSize="md" />
                 <h1 className="mt-5 text-[21px] font-semibold tracking-tight text-ink">{title}</h1>
                 {subtitle && <p className="mt-1.5 text-[13px] text-muted">{subtitle}</p>}
               </div>
