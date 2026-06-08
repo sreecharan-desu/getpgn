@@ -1,5 +1,7 @@
 # GetPGN
 
+**Live:** [getpgn.in](https://getpgn.in) · **Repo:** [github.com/azeezchess/getpgn](https://github.com/azeezchess/getpgn)
+
 GetPGN is a state-of-the-art AI-powered chess scoresheet digitizer. It allows players, arbiters, and organizers to instantly convert handwritten chess scoresheets (in photos or scans) into standard PGN (Portable Game Notation) files. 
 
 Powered by Next.js 15, Prisma, python-chess validation, and advanced Gemini Multimodal models, GetPGN offers a seamless, modern, light-themed web interface for uploading, validating, playing through, and sharing chess games.
