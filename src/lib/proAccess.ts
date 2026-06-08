@@ -1,18 +1,15 @@
-import { User } from '@prisma/client';
-import type { SessionUser } from '@/lib/session';
-
-type ProAccessUser = Pick<
-  User,
-  | 'plan'
-  | 'subscriptionStatus'
-  | 'subscriptionEnd'
-  | 'subscriptionExpiresAt'
->;
+/** Fields required to evaluate Pro subscription access. */
+export type ProAccessUser = {
+  plan: 'FREE' | 'PAID';
+  subscriptionStatus?: string | null;
+  subscriptionEnd?: Date | string | null;
+  subscriptionExpiresAt?: Date | string | null;
+};
 
 /**
  * Checks if a user has an active Pro subscription or valid premium access.
  */
-export function isProUser(user: ProAccessUser | SessionUser | null | undefined): boolean {
+export function isProUser(user: ProAccessUser | null | undefined): boolean {
   if (!user) return false;
 
   // 1. Check if the subscription is active

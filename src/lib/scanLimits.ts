@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { isProUser } from '@/lib/proAccess';
+import { isProUser, type ProAccessUser } from '@/lib/proAccess';
 
 export const FREE_SCAN_LIMIT = 2;
 export const PRO_MONTHLY_PLAN_SCAN_LIMIT = 100;
@@ -7,15 +7,11 @@ export const PRO_YEARLY_PLAN_SCAN_LIMIT = 1000;
 
 export type ScanTier = 'free' | 'pro';
 
-export interface ScanUsageUser {
-  plan: 'FREE' | 'PAID';
+export interface ScanUsageUser extends ProAccessUser {
   scanCount: number;
   monthlyScanCount: number;
   monthlyScanMonth: string | null;
   subscriptionPlan?: string | null;
-  subscriptionStatus?: string | null;
-  subscriptionEnd?: Date | string | null;
-  subscriptionExpiresAt?: Date | string | null;
 }
 
 export interface ScanUsage {

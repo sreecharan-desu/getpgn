@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { requireVerifiedUser } from '@/lib/requireAuth';
-import { prisma } from '@/lib/db';
 import { isProUser } from '@/lib/proAccess';
 import {
   getScanLimitErrorMessage,
