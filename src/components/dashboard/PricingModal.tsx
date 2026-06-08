@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { X } from "lucide-react";
 import { FREE_SCAN_LIMIT } from "@/components/dashboard/FreePlanUI";
 import { PricingSectionContent } from "@/components/pricing/PricingSectionContent";
+import { lockBodyScroll, unlockBodyScroll } from "@/lib/bodyScrollLock";
 
 interface PricingModalProps {
   open: boolean;
@@ -27,11 +28,8 @@ export function PricingModal({
 }: PricingModalProps) {
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    lockBodyScroll();
+    return () => unlockBodyScroll();
   }, [open]);
 
   if (!open) return null;

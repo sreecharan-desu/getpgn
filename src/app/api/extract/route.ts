@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { requireVerifiedUser } from '@/lib/requireAuth';
-import { isProUser } from '@/lib/proAccess';
 import { validateChessMoves } from '@/lib/chess-validator';
 import { apiError, validateImageUpload } from '@/lib/security';
-import { rateLimitByIp } from '@/lib/rateLimit';
+import { rateLimitByIp, rateLimitByUser } from '@/lib/rateLimit';
 import {
-  getScanLimitErrorMessage,
-  getScanPeriodKey,
-  getScanUsage,
-  reserveFreeScan,
-  reserveProScan,
-  rollbackFreeScan,
-  rollbackProScan,
+  reserveScanForUser,
+  rollbackScanReservation,
+  type ScanReservation,
 } from '@/lib/scanLimits';
+import { createValidationSessionToken } from '@/lib/validationSession';
 
 let cachedAiClient: GoogleGenAI | null = null;
 
@@ -29,61 +25,23 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   const apiStartTime = Date.now();
-  let scanReservedForUserId: string | null = null;
-  let scanReservedAsPro = false;
-  let scanReservedPeriodKey: string | null = null;
-  let scanReservedPlan: string | null | undefined = null;
+  let reservation: ScanReservation | null = null;
 
   try {
     const auth = await requireVerifiedUser();
     if (!auth.ok) return auth.response;
-    const user = auth.user;
 
-    const isPro = isProUser(user);
-    const usage = getScanUsage(user);
+    const userLimited = rateLimitByUser(auth.user.id, 'extract', 10, 60 * 60_000);
+    if (userLimited) return userLimited;
 
-    if (usage.exhausted) {
-      return NextResponse.json(
-        {
-          error: getScanLimitErrorMessage(usage),
-          limitExceeded: true,
-        },
-        { status: 403 },
-      );
-    }
-
-    if (isPro) {
-      const periodKey = getScanPeriodKey(user.subscriptionPlan);
-      const reserved = await reserveProScan(user.id, user.subscriptionPlan, periodKey);
-      if (!reserved) {
-        return NextResponse.json(
-          {
-            error: getScanLimitErrorMessage(getScanUsage(user)),
-            limitExceeded: true,
-          },
-          { status: 403 },
-        );
-      }
-      scanReservedForUserId = user.id;
-      scanReservedAsPro = true;
-      scanReservedPeriodKey = periodKey;
-      scanReservedPlan = user.subscriptionPlan;
-    } else {
-      const reserved = await reserveFreeScan(user.id);
-      if (!reserved) {
-        return NextResponse.json(
-          {
-            error: getScanLimitErrorMessage(getScanUsage(user)),
-            limitExceeded: true,
-          },
-          { status: 403 },
-        );
-      }
-      scanReservedForUserId = user.id;
-    }
+    const reserved = await reserveScanForUser(auth.user);
+    if (!reserved.ok) return reserved.response;
+    reservation = reserved.reservation;
 
     const apiKey = process.env.AI_API_KEY;
     if (!apiKey) {
+      await rollbackScanReservation(reservation);
+      reservation = null;
       return NextResponse.json(
         { error: 'AI extraction is not configured.' },
         { status: 503 },
@@ -93,7 +51,11 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const validated = await validateImageUpload(file);
-    if (!validated.ok) return validated.response;
+    if (!validated.ok) {
+      await rollbackScanReservation(reservation);
+      reservation = null;
+      return validated.response;
+    }
 
     const { buffer, mimeType } = validated;
     const base64Data = buffer.toString('base64');
@@ -192,6 +154,8 @@ UNCERTAINTY:
     const responseText = response.text;
     if (!responseText) {
       console.error('[Extract API] AI engine returned empty content.');
+      await rollbackScanReservation(reservation);
+      reservation = null;
       return NextResponse.json({ error: 'AI extraction failed.' }, { status: 500 });
     }
 
@@ -206,6 +170,10 @@ UNCERTAINTY:
         aiProcessingTimeMs: aiTimeMs,
         totalApiTimeMs: Date.now() - apiStartTime,
       };
+      parsedJson.validationToken = createValidationSessionToken(auth.user.id);
+      parsedJson.scanConsumed = true;
+
+      reservation = null;
 
       console.log(
         `[Extract API] ── END (success, total time ${Date.now() - apiStartTime}ms) ─────────────────────────────`,
@@ -214,20 +182,16 @@ UNCERTAINTY:
       return NextResponse.json(parsedJson);
     } catch (parseError) {
       console.error('[Extract API] Failed to parse AI JSON response:', parseError);
+      if (reservation) {
+        await rollbackScanReservation(reservation);
+        reservation = null;
+      }
       return NextResponse.json({ error: 'Failed to parse extracted content.' }, { status: 500 });
     }
   } catch (error: unknown) {
     console.error('[Extract API] ── END (error) ────────────────────────────────');
-    if (scanReservedForUserId) {
-      if (scanReservedAsPro) {
-        await rollbackProScan(
-          scanReservedForUserId,
-          scanReservedPlan,
-          scanReservedPeriodKey ?? getScanPeriodKey(scanReservedPlan),
-        );
-      } else {
-        await rollbackFreeScan(scanReservedForUserId);
-      }
+    if (reservation) {
+      await rollbackScanReservation(reservation);
     }
     return apiError('Extract API', error, 'Extraction failed. Please try again.');
   }

@@ -2,16 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { requireVerifiedUser } from '@/lib/requireAuth';
-import { isProUser } from '@/lib/proAccess';
-import {
-  getScanLimitErrorMessage,
-  getScanUsage,
-  reserveFreeScan,
-  reserveProScan,
-  getScanPeriodKey,
-} from '@/lib/scanLimits';
 import { validateChessMoves } from '@/lib/chess-validator';
+import {
+  getScanUsage,
+  reserveScanForUser,
+  rollbackScanReservation,
+  type ScanReservation,
+} from '@/lib/scanLimits';
 import { isDevRouteAllowed, devRouteBlockedResponse } from '@/lib/security';
+import { rateLimitByIp } from '@/lib/rateLimit';
 
 // ─── Image Compression ────────────────────────────────────────────────────────
 const MAX_WIDTH = 1200;
@@ -40,54 +39,38 @@ async function compressImage(buffer: Buffer): Promise<{ data: Buffer; mimeType: 
 export async function POST(req: NextRequest) {
   if (!isDevRouteAllowed()) return devRouteBlockedResponse();
 
+  const limited = rateLimitByIp(req, 'test-pipeline', 20, 60 * 60_000);
+  if (limited) return limited;
+
   const apiStartTime = Date.now();
+  let reservation: ScanReservation | null = null;
+
   try {
     const auth = await requireVerifiedUser();
     if (!auth.ok) return auth.response;
     const user = auth.user;
 
-    const isPro = isProUser(user);
-    const usage = getScanUsage(user);
-    if (usage.exhausted) {
-      return NextResponse.json({
-        error: getScanLimitErrorMessage(usage),
-        limitExceeded: true,
-      }, { status: 403 });
-    }
+    const reserved = await reserveScanForUser(user);
+    if (!reserved.ok) return reserved.response;
+    reservation = reserved.reservation;
 
-    if (isPro) {
-      const reserved = await reserveProScan(
-        user.id,
-        user.subscriptionPlan,
-        getScanPeriodKey(user.subscriptionPlan),
-      );
-      if (!reserved) {
-        return NextResponse.json({
-          error: getScanLimitErrorMessage(getScanUsage(user)),
-          limitExceeded: true,
-        }, { status: 403 });
-      }
-    } else {
-      const reserved = await reserveFreeScan(user.id);
-      if (!reserved) {
-        return NextResponse.json({
-          error: getScanLimitErrorMessage(getScanUsage(user)),
-          limitExceeded: true,
-        }, { status: 403 });
-      }
-    }
+    const usage = getScanUsage(user);
 
     const apiKey = process.env.AI_API_KEY;
     if (!apiKey) {
+      await rollbackScanReservation(reservation);
+      reservation = null;
       return NextResponse.json(
-        { error: 'AI_API_KEY environment variable is not configured.' },
-        { status: 500 }
+        { error: 'AI extraction is not configured.' },
+        { status: 503 },
       );
     }
 
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) {
+      await rollbackScanReservation(reservation);
+      reservation = null;
       return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
     }
 
@@ -97,7 +80,6 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // Improved prompt with explicit instructions to resolve common handwriting ambiguities
     const systemPrompt = `You are an expert chess scoresheet OCR parser. Extract every chess move from the scoresheet image.
 
 Output ONLY valid JSON in exactly this format, no other text:
@@ -175,6 +157,8 @@ Rules:
     const aiTimeMs = Date.now() - aiStartTime;
     const responseText = response.text;
     if (!responseText) {
+      await rollbackScanReservation(reservation);
+      reservation = null;
       return NextResponse.json({ error: 'AI returned empty content.' }, { status: 500 });
     }
 
@@ -192,14 +176,12 @@ Rules:
       moves: (rawMovesList as ExtractedMove[]).map((m) => ({
         moveNumber: m.move_number,
         white: m.white,
-        black: m.black
-      }))
+        black: m.black,
+      })),
     };
 
-    // ─── Call TypeScript chess validator ──────────────────────────────────
     const validatorResult = validateChessMoves(validatorPayload.moves);
-    
-    // Map Python validator results to route response metrics
+
     let movesDetected = 0;
     let legalMovesCount = 0;
     let appliedMovesCount = 0;
@@ -221,13 +203,12 @@ Rules:
     const validatedTurns = validatorResult.moves || [];
     for (const turn of validatedTurns) {
       const moveNum = turn.moveNumber;
-      
+
       for (const player of ['white', 'black'] as const) {
         const ply = turn[player];
         if (!ply || !ply.original) continue;
 
         const orig = ply.original.trim();
-        // Skip game termination results
         const isResult = ['1-0', '0-1', '1/2-1/2', '½-½', '*'].includes(orig);
         if (isResult) continue;
 
@@ -244,16 +225,17 @@ Rules:
             move_number: moveNum,
             player: player,
             notation: orig,
-            applied_as: san!
+            applied_as: san!,
           });
         } else if (status === 'illegal' && san === null) {
           illegalMoves.push({
             move_number: moveNum,
             player: player,
             notation: orig,
-            reason: (ply.suggestions && ply.suggestions.length > 0)
-              ? `Illegal move. Suggestions: ${ply.suggestions.join(', ')}`
-              : 'Illegal move (no recovery suggestions found).'
+            reason:
+              ply.suggestions && ply.suggestions.length > 0
+                ? `Illegal move. Suggestions: ${ply.suggestions.join(', ')}`
+                : 'Illegal move (no recovery suggestions found).',
           });
         }
       }
@@ -265,6 +247,8 @@ Rules:
     const hasRecovered = recoveredMoves.length > 0;
     const pgnIsPartial = hasIllegal && !hasRecovered && appliedMovesCount < movesDetected;
     const pgnHasRecoveries = hasRecovered;
+
+    reservation = null;
 
     return NextResponse.json({
       processing_time_ms: totalTimeMs,
@@ -282,8 +266,10 @@ Rules:
       moves: rawMovesList,
       scan_count: usage.used + 1,
     });
-
   } catch (error) {
+    if (reservation) {
+      await rollbackScanReservation(reservation);
+    }
     const err = error as Error;
     console.error('Test pipeline error:', err);
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });

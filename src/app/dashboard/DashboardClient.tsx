@@ -28,7 +28,6 @@ import {
 } from "@/lib/friendlyError";
 import { getTimeGreeting } from "@/lib/greeting";
 import { forceLogout } from "@/lib/clientStorage";
-import { validateChessMoves } from "@/lib/chess-validator";
 import { Spinner } from "@/components/ui/Spinner";
 import { IconInput } from "@/components/ui/IconInput";
 import { BillingRowSkeleton } from "@/components/ui/Skeleton";
@@ -225,6 +224,8 @@ function computeMoveStats(turns: Turn[]) {
 
 /** Shared horizontal rhythm — keeps dashboard readable on wide screens. */
 const DASHBOARD_SHELL = "mx-auto w-full max-w-6xl";
+/** Abort extraction if the API does not respond (prevents infinite overlay). */
+const EXTRACT_TIMEOUT_MS = 180_000;
 /** Narrow centered column for upload focus. */
 const UPLOAD_FOCUS = "mx-auto w-full max-w-[440px]";
 const uploadShell = (wide?: boolean) => (wide ? "w-full" : UPLOAD_FOCUS);
@@ -271,6 +272,9 @@ export default function DashboardClient({
     "upload",
   );
   const [pgnText, setPgnText] = useState("");
+  const [validationSessionToken, setValidationSessionToken] = useState<
+    string | null
+  >(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
@@ -344,8 +348,13 @@ export default function DashboardClient({
       const raw = localStorage.getItem(`getpgn:workspace:${user.id}`);
       if (!raw) return;
       const snap = JSON.parse(raw);
+      if (!snap) return;
+      // Stale mid-extraction snapshots cannot be resumed after reload.
+      if (snap.appState === "extracting") {
+        localStorage.removeItem(`getpgn:workspace:${user.id}`);
+        return;
+      }
       if (
-        !snap ||
         snap.appState !== "review" ||
         !Array.isArray(snap.turns) ||
         snap.turns.length === 0
@@ -364,6 +373,9 @@ export default function DashboardClient({
           : null,
       );
       if (typeof snap.pgnText === "string") setPgnText(snap.pgnText);
+      if (typeof snap.validationSessionToken === "string") {
+        setValidationSessionToken(snap.validationSessionToken);
+      }
       if (
         typeof snap.imageUrl === "string" &&
         /^https?:\/\//i.test(snap.imageUrl)
@@ -378,6 +390,16 @@ export default function DashboardClient({
       setWorkspaceReady(true);
     }
   }, [user.id]);
+
+  // Safety net: never block the dashboard behind restore skeletons indefinitely.
+  useEffect(() => {
+    if (workspaceReady) return;
+    const id = window.setTimeout(() => {
+      hasRestoredRef.current = true;
+      setWorkspaceReady(true);
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [workspaceReady, user.id]);
 
   // Match move sheet height to the board card on lg+; move list scrolls when longer.
   useLayoutEffect(() => {
@@ -433,6 +455,7 @@ export default function DashboardClient({
           activeGameId,
           activeGameSharedSlug,
           pgnText,
+          validationSessionToken,
           imageUrl:
             imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
         };
@@ -454,6 +477,7 @@ export default function DashboardClient({
     activeGameId,
     activeGameSharedSlug,
     pgnText,
+    validationSessionToken,
     imageUrl,
   ]);
 
@@ -494,22 +518,18 @@ export default function DashboardClient({
     }
   }, [isPro]);
 
-  // Close pricing modal on Escape; lock body scroll while open
+  // Close pricing modal on Escape (scroll lock lives in PricingModal via bodyScrollLock).
   useEffect(() => {
     if (!showPricingModal) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !billingLoading) setShowPricingModal(false);
     };
     window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [showPricingModal, billingLoading]);
 
   const handleImageSelected = (file: File) => {
+    if (scansExhausted) return;
     setSelectedFile(file);
     setImageUrl(URL.createObjectURL(file));
     setError(null);
@@ -584,6 +604,12 @@ export default function DashboardClient({
     setActiveGameId(null);
     setActiveGameSharedSlug(null);
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      EXTRACT_TIMEOUT_MS,
+    );
+
     try {
       let uploadFile: Blob = selectedFile;
       try {
@@ -601,6 +627,7 @@ export default function DashboardClient({
       const extractRes = await fetch("/api/extract", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       if (!extractRes.ok) {
@@ -608,7 +635,10 @@ export default function DashboardClient({
           extractRes,
           "We couldn't read this scoresheet. Try a clearer, well-lit photo.",
         );
-        if (apiErr === null) return;
+        if (apiErr === null) {
+          setAppState("upload");
+          return;
+        }
         throw new Error(apiErr);
       }
 
@@ -637,17 +667,26 @@ export default function DashboardClient({
         }));
       }
 
+      if (typeof extractedData.validationToken === "string") {
+        setValidationSessionToken(extractedData.validationToken);
+      }
       applyValidationResult(extractedData);
       setAppState("review");
     } catch (err: unknown) {
       console.error(err);
+      const fallback =
+        "We couldn't read this scoresheet. Try a clearer, well-lit photo.";
       setError(
         friendlyError(
-          err,
-          "We couldn't read this scoresheet. Try a clearer, well-lit photo.",
+          err instanceof DOMException && err.name === "AbortError"
+            ? "Extraction took too long. Check your connection and try again."
+            : err,
+          fallback,
         ),
       );
       setAppState("upload");
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   };
 
@@ -660,6 +699,23 @@ export default function DashboardClient({
     setPgn(valData.pgn || "");
     setGameIsValid(!!valData.valid);
     setCurrentPlyIndex(0);
+  };
+
+  const bumpScanCountAfterConsume = () => {
+    if (!isPro) {
+      setUser((prev) => ({
+        ...prev,
+        scanCount: Math.min(FREE_SCAN_LIMIT, prev.scanCount + 1),
+      }));
+    } else {
+      const periodKey = getScanPeriodKey(user.subscriptionPlan);
+      setUser((prev) => ({
+        ...prev,
+        monthlyScanMonth: periodKey,
+        monthlyScanCount:
+          prev.monthlyScanMonth === periodKey ? prev.monthlyScanCount + 1 : 1,
+      }));
+    }
   };
 
   const persistActiveGame = async (turnsToSave: Turn[], pgnToSave: string) => {
@@ -700,13 +756,38 @@ export default function DashboardClient({
 
   const runValidation = async (rawMoves: unknown[]) => {
     try {
-      const valData = validateChessMoves(
-        rawMoves as Array<{
-          moveNumber: number;
-          white: unknown;
-          black: unknown;
-        }>,
-      );
+      const res = await fetch("/api/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          moves: rawMoves,
+          validationToken: validationSessionToken,
+        }),
+      });
+
+      if (!res.ok) {
+        if (await forceLogoutIfUserNotFound(res)) return;
+        const errData = await res.json().catch(() => ({}));
+        if (errData.limitExceeded) {
+          setShowPricingModal(true);
+        }
+        throw new Error(
+          friendlyError(
+            errData.error,
+            "We couldn't validate these moves. Please try again.",
+          ),
+        );
+      }
+
+      const valData = await res.json();
+
+      if (typeof valData.validationToken === "string") {
+        setValidationSessionToken(valData.validationToken);
+      }
+      if (valData.scanConsumed) {
+        bumpScanCountAfterConsume();
+      }
+
       applyValidationResult(valData);
       await persistActiveGame(valData.moves || [], valData.pgn || "");
     } catch (err: unknown) {
@@ -861,31 +942,6 @@ export default function DashboardClient({
       setCurrentPlyIndex(targetPly);
     } catch {
       // Handled in runValidation
-    }
-  };
-
-  const handleLoadPgn = async () => {
-    const raw = pgnToRawMoves(pgnText);
-    if (raw.length === 0) {
-      setError(
-        'No moves found. Paste a PGN or a move list like "1. e4 e5 2. Nf3 Nc6".',
-      );
-      return;
-    }
-
-    setError(null);
-    setActiveGameId(null);
-    setActiveGameSharedSlug(null);
-    setSelectedFile(null);
-    if (imageUrl) URL.revokeObjectURL(imageUrl);
-    setImageUrl(null);
-
-    try {
-      await runValidation(raw);
-      setAppState("review");
-      toast.success("Game loaded — review the board, then save it.");
-    } catch {
-      toast.error("We couldn't read that PGN. Check the moves and try again.");
     }
   };
 
@@ -1340,6 +1396,14 @@ export default function DashboardClient({
           onImageSelected={handleImageSelected}
           imageUrl={imageUrl}
           onClear={handleClearImage}
+          disabled={scansExhausted}
+          disabledMessage={
+            isPro
+              ? scanUsage.periodUnit === "year"
+                ? "You've used all scans for this year. Your quota resets on January 1."
+                : "You've used all scans for this month. Your quota resets on the 1st."
+              : "You've used both free scans. Upgrade to Pro to keep digitizing."
+          }
         />
         {selectedFile && (
           <div className="gp-digitize-shell gp-fade-up p-1.5">
@@ -1826,6 +1890,7 @@ export default function DashboardClient({
     setActiveGameId(null);
     setActiveGameSharedSlug(null);
     setPgnText("");
+    setValidationSessionToken(null);
     handleClearImage();
     setAppState("upload");
     try {
@@ -1960,39 +2025,38 @@ export default function DashboardClient({
 
   const loadSavedGame = async (game: SavedGame) => {
     try {
-      let fullGame = game;
-
-      if (!fullGame.pgn || !fullGame.movesJson) {
-        const res = await fetch(`/api/games/${game.id}`);
-        if (!res.ok) {
-          const apiErr = await readApiErrorOrLogout(
-            res,
-            "We couldn't open that saved game.",
-          );
-          if (apiErr === null) return;
-          throw new Error(apiErr);
-        }
-        const data = await res.json();
-        fullGame = {
-          id: data.game.id,
-          title: data.game.title,
-          pgn: data.game.pgn,
-          movesJson: data.game.movesJson,
-          createdAt: data.game.createdAt,
-          publicLink: data.game.publicLink ?? null,
-        };
-        setGames((prev) =>
-          prev.map((g) => (g.id === fullGame.id ? fullGame : g)),
+      const res = await fetch(`/api/games/${game.id}`);
+      if (!res.ok) {
+        const apiErr = await readApiErrorOrLogout(
+          res,
+          "We couldn't open that saved game.",
         );
+        if (apiErr === null) return;
+        throw new Error(apiErr);
+      }
+      const data = await res.json();
+      const fullGame: SavedGame = {
+        id: data.game.id,
+        title: data.game.title,
+        pgn: data.game.pgn,
+        movesJson: data.game.movesJson,
+        createdAt: data.game.createdAt,
+        publicLink: data.game.publicLink ?? null,
+      };
+      setGames((prev) =>
+        prev.map((g) => (g.id === fullGame.id ? fullGame : g)),
+      );
+
+      if (typeof data.validationToken === "string") {
+        setValidationSessionToken(data.validationToken);
       }
 
-      const parsedTurns = JSON.parse(fullGame.movesJson!) as Array<{
-        moveNumber: number;
-        white: unknown;
-        black: unknown;
-      }>;
-      const valData = validateChessMoves(parsedTurns);
-      applyValidationResult(valData);
+      const parsedTurns = JSON.parse(fullGame.movesJson!) as Turn[];
+      applyValidationResult({
+        moves: parsedTurns,
+        pgn: fullGame.pgn,
+        valid: true,
+      });
       setActiveGameId(fullGame.id);
       setActiveGameSharedSlug(fullGame.publicLink?.slug || null);
       setAppState("review");

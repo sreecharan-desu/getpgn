@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { ZoomIn, ZoomOut, X, Search } from "lucide-react";
+import { lockBodyScroll, unlockBodyScroll } from "@/lib/bodyScrollLock";
 
 interface ImageZoomProps {
   src: string;
@@ -29,11 +30,10 @@ export const ImageZoom: React.FC<ImageZoomProps> = ({ src, alt, imgClassName = "
       if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      unlockBodyScroll();
     };
   }, [open, close]);
 

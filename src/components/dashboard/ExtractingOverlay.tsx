@@ -4,6 +4,7 @@ import React, { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { QueenMark } from "@/components/ui/Logo";
+import { lockBodyScroll, unlockBodyScroll } from "@/lib/bodyScrollLock";
 
 const CHESS_PIECES = ["♔", "♕", "♖", "♗", "♘", "♙"] as const;
 
@@ -64,11 +65,8 @@ export function ExtractingOverlay({
   const tip = TIPS[stepIndex % TIPS.length];
 
   useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
+    lockBodyScroll();
+    return () => unlockBodyScroll();
   }, []);
 
   const ambientSquares = useMemo(

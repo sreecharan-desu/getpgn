@@ -3,6 +3,7 @@ import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
 import { isProUser } from '@/lib/proAccess';
 import { savedGameDetailSelect } from '@/lib/dbSelects';
+import { createValidationSessionToken } from '@/lib/validationSession';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -27,7 +28,11 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Game not found.' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, game });
+    return NextResponse.json({
+      success: true,
+      game,
+      validationToken: createValidationSessionToken(user.id),
+    });
   } catch (error) {
     const err = error as Error;
     console.error('Fetch game error:', err);

@@ -56,7 +56,19 @@ export function rateLimitByIp(
   windowMs: number,
 ): NextResponse | null {
   const ip = getClientIp(req);
-  const result = rateLimit(`${routeKey}:${ip}`, limit, windowMs);
+  const result = rateLimit(`${routeKey}:ip:${ip}`, limit, windowMs);
+  if (!result.ok) return rateLimitResponse(result.retryAfterSec);
+  return null;
+}
+
+/** Per-user rate limit helper — complements IP limits against scripted abuse. */
+export function rateLimitByUser(
+  userId: string,
+  routeKey: string,
+  limit: number,
+  windowMs: number,
+): NextResponse | null {
+  const result = rateLimit(`${routeKey}:user:${userId}`, limit, windowMs);
   if (!result.ok) return rateLimitResponse(result.retryAfterSec);
   return null;
 }

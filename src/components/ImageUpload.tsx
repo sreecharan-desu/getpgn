@@ -5,12 +5,16 @@ interface ImageUploadProps {
   onImageSelected: (file: File) => void;
   imageUrl: string | null;
   onClear: () => void;
+  disabled?: boolean;
+  disabledMessage?: string;
 }
 
 export const ImageUpload: React.FC<ImageUploadProps> = ({
   onImageSelected,
   imageUrl,
   onClear,
+  disabled = false,
+  disabledMessage = 'No scans left. Upgrade to continue digitizing.',
 }) => {
   const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +31,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   };
 
   const validateAndSelectFile = (file: File | undefined) => {
-    if (!file) return;
+    if (disabled || !file) return;
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
     if (!validTypes.includes(file.type)) {
       setError('Unsupported file type. Please upload a JPG, JPEG, or PNG image.');
@@ -46,6 +50,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
+    if (disabled) return;
     if (e.dataTransfer.files?.[0]) {
       validateAndSelectFile(e.dataTransfer.files[0]);
     }
@@ -59,6 +64,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   };
 
   const onButtonClick = () => {
+    if (disabled) return;
     fileInputRef.current?.click();
   };
 
@@ -70,19 +76,25 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         className="hidden"
         accept=".jpg,.jpeg,.png"
         onChange={handleChange}
+        disabled={disabled}
       />
 
       {!imageUrl ? (
         <div
-          onDragEnter={handleDrag}
-          onDragOver={handleDrag}
-          onDragLeave={handleDrag}
-          onDrop={handleDrop}
-          onClick={onButtonClick}
-          className={`group relative flex min-h-[min(400px,58vh)] w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[20px] border px-6 py-12 transition-all duration-300 select-none ${
-            isDragActive
-              ? 'border-ink/30 bg-surface shadow-[var(--shadow-pop)]'
-              : 'border-line/60 bg-surface/30 hover:border-line-strong hover:bg-surface/50'
+          onDragEnter={disabled ? undefined : handleDrag}
+          onDragOver={disabled ? undefined : handleDrag}
+          onDragLeave={disabled ? undefined : handleDrag}
+          onDrop={disabled ? undefined : handleDrop}
+          onClick={disabled ? undefined : onButtonClick}
+          aria-disabled={disabled || undefined}
+          className={`group relative flex min-h-[min(400px,58vh)] w-full flex-col items-center justify-center overflow-hidden rounded-[20px] border px-6 py-12 transition-all duration-300 select-none ${
+            disabled
+              ? 'cursor-not-allowed border-line/40 bg-surface/20 opacity-70'
+              : `cursor-pointer ${
+                  isDragActive
+                    ? 'border-ink/30 bg-surface shadow-[var(--shadow-pop)]'
+                    : 'border-line/60 bg-surface/30 hover:border-line-strong hover:bg-surface/50'
+                }`
           }`}
         >
           <div
@@ -101,11 +113,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           </div>
 
           <h3 className="relative mb-1.5 text-center text-[16px] font-semibold tracking-tight text-ink">
-            {isDragActive ? 'Drop to upload' : 'Upload scoresheet'}
+            {disabled ? 'No scans left' : isDragActive ? 'Drop to upload' : 'Upload scoresheet'}
           </h3>
 
           <p className="relative max-w-[16rem] text-center text-[13px] leading-relaxed text-muted">
-            Drag and drop or click to browse. A clear, well-lit photo works best.
+            {disabled
+              ? disabledMessage
+              : 'Drag and drop or click to browse. A clear, well-lit photo works best.'}
           </p>
 
           <p className="relative mt-5 text-[11px] font-medium tracking-wide text-muted-2">
@@ -139,9 +153,10 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
                 <button
                   type="button"
                   onClick={onButtonClick}
-                  title="Replace image"
-                  aria-label="Replace image"
-                  className="grid h-8 w-8 place-items-center rounded-full border border-line/60 bg-paper/90 text-muted backdrop-blur-md transition-colors hover:border-line-strong hover:text-ink cursor-pointer"
+                  disabled={disabled}
+                  title={disabled ? 'No scans left' : 'Replace image'}
+                  aria-label={disabled ? 'No scans left' : 'Replace image'}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-line/60 bg-paper/90 text-muted backdrop-blur-md transition-colors hover:border-line-strong hover:text-ink cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line/60 disabled:hover:text-muted"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>

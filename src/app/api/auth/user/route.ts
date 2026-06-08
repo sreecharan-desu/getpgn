@@ -21,6 +21,16 @@ export async function GET() {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
+    if (!user.emailVerified) {
+      return NextResponse.json({
+        authenticated: true,
+        user: {
+          username: user.username,
+          emailVerified: false,
+        },
+      });
+    }
+
     return NextResponse.json({
       authenticated: true,
       user: {
@@ -36,8 +46,8 @@ export async function GET() {
         subscriptionStatus: user.subscriptionStatus,
         subscriptionStart: user.subscriptionStart,
         subscriptionEnd: user.subscriptionEnd,
-        paymentProvider: user.paymentProvider
-      }
+        paymentProvider: user.paymentProvider,
+      },
     });
   } catch (err) {
     console.error('[Auth User API] Error:', err);

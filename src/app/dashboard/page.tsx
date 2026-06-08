@@ -71,7 +71,7 @@ export default async function DashboardPage() {
     paymentProvider: user.paymentProvider
   };
 
-  const isDevMode = process.env.IS_DEV === 'TRUE';
+  const isDevMode = process.env.NODE_ENV !== 'production';
 
   const sanitizedGames = savedGames.map((game) => ({
     id: game.id,

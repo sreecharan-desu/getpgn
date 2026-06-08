@@ -14,10 +14,12 @@ export function getJwtSecret(): string {
   return secret;
 }
 
-/** Dev-only routes (billing simulation, test pipeline). Blocked in production unless IS_DEV=TRUE. */
+/**
+ * Dev-only routes (billing simulation, test pipeline).
+ * Never enabled in production — local NODE_ENV=development only.
+ */
 export function isDevRouteAllowed(): boolean {
-  if (process.env.NODE_ENV !== 'production') return true;
-  return process.env.IS_DEV === 'TRUE';
+  return process.env.NODE_ENV !== 'production';
 }
 
 export function devRouteBlockedResponse(): NextResponse {
@@ -42,9 +44,14 @@ export function apiError(
 }
 
 export function getClientIp(req: NextRequest): string {
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
   const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0]?.trim() || 'unknown';
-  return req.headers.get('x-real-ip') || 'unknown';
+  if (forwarded) {
+    const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
+    return parts[parts.length - 1] || 'unknown';
+  }
+  return 'unknown';
 }
 
 export type ImageValidationResult =

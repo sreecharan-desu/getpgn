@@ -4,6 +4,7 @@ import { queueVerificationEmail } from '@/lib/emailVerification';
 import { createSession } from '@/lib/session';
 import { apiError, getClientIp } from '@/lib/security';
 import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
+import { getEmailDomain, isDisposableEmail } from '@/lib/disposableEmail';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: NextRequest) {
@@ -35,6 +36,20 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    if (isDisposableEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { error: 'Please use a permanent email address to sign up.' },
+        { status: 400 },
+      );
+    }
+
+    const emailDomain = getEmailDomain(normalizedEmail);
+    if (emailDomain) {
+      const domainLimit = rateLimit(`signup:domain:${emailDomain}`, 3, 24 * 60 * 60_000);
+      if (!domainLimit.ok) return rateLimitResponse(domainLimit.retryAfterSec);
+    }
+
     const [existingUsername, existingEmail] = await Promise.all([
       prisma.user.findUnique({ where: { username }, select: { id: true } }),
       prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }),

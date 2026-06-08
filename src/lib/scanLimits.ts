@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isProUser, type ProAccessUser } from '@/lib/proAccess';
 
@@ -9,6 +10,7 @@ export type ScanTier = 'free' | 'pro';
 export type ScanPeriodUnit = 'month' | 'year';
 
 export interface ScanUsageUser extends ProAccessUser {
+  id: string;
   scanCount: number;
   monthlyScanCount: number;
   monthlyScanMonth: string | null;
@@ -160,6 +162,81 @@ export async function rollbackProScan(
       data: { monthlyScanCount: { decrement: 1 } },
     })
     .catch((err) => console.error('[Scan Limits] Pro scan rollback failed:', err));
+}
+
+export interface ScanReservation {
+  userId: string;
+  isPro: boolean;
+  periodKey: string | null;
+  plan: string | null | undefined;
+}
+
+/** Reserve one scan for a verified user, or return a 403 response payload. */
+export async function reserveScanForUser(
+  user: ScanUsageUser,
+): Promise<{ ok: true; reservation: ScanReservation } | { ok: false; response: NextResponse }> {
+  const usage = getScanUsage(user);
+  if (usage.exhausted) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: getScanLimitErrorMessage(usage), limitExceeded: true },
+        { status: 403 },
+      ),
+    };
+  }
+
+  const isPro = isProUser(user);
+  if (isPro) {
+    const periodKey = getScanPeriodKey(user.subscriptionPlan);
+    const reserved = await reserveProScan(user.id, user.subscriptionPlan, periodKey);
+    if (!reserved) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: getScanLimitErrorMessage(getScanUsage(user)), limitExceeded: true },
+          { status: 403 },
+        ),
+      };
+    }
+    return {
+      ok: true,
+      reservation: {
+        userId: user.id,
+        isPro: true,
+        periodKey,
+        plan: user.subscriptionPlan,
+      },
+    };
+  }
+
+  const reserved = await reserveFreeScan(user.id);
+  if (!reserved) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: getScanLimitErrorMessage(getScanUsage(user)), limitExceeded: true },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    reservation: { userId: user.id, isPro: false, periodKey: null, plan: null },
+  };
+}
+
+export async function rollbackScanReservation(reservation: ScanReservation): Promise<void> {
+  if (reservation.isPro) {
+    await rollbackProScan(
+      reservation.userId,
+      reservation.plan,
+      reservation.periodKey ?? getScanPeriodKey(reservation.plan),
+    );
+  } else {
+    await rollbackFreeScan(reservation.userId);
+  }
 }
 
 export function getScanLimitErrorMessage(usage: ScanUsage): string {
