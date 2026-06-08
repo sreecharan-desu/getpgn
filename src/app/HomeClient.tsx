@@ -18,6 +18,7 @@ import {
   Lock,
   RotateCcw,
   LayoutGrid,
+  Heart,
 } from "lucide-react";
 import { Logo, QueenMark } from "@/components/ui/Logo";
 import { QueenMascot } from "@/components/ui/QueenMascot";
@@ -372,6 +373,26 @@ export default function GetPGNLandingPage() {
           <p className="font-mono text-[11px] text-muted-2">
             © {new Date().getFullYear()} GetPGN
           </p>
+          </div>
+        </div>
+        <div className="border-t border-line/40">
+          <div className="mx-auto w-full max-w-6xl px-5 py-3 sm:px-8">
+            <p className="inline-flex w-full items-center justify-end gap-1 text-[11px] text-muted-2">
+              <span>Built with</span>
+              <Heart
+                className="h-3 w-3 animate-pulse fill-rose-500 text-rose-500"
+                aria-hidden="true"
+              />
+              <span>by</span>
+              <a
+                href="https://sreecharandesu.in"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-muted transition-colors hover:text-ink"
+              >
+                sreecharan
+              </a>
+            </p>
           </div>
         </div>
       </footer>

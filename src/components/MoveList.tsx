@@ -166,10 +166,18 @@ export const MoveList: React.FC<MoveListProps> = ({
     };
   }, [menu]);
 
-  const handleFirst = () => { setIsPlaying(false); onSelectPly(0); };
-  const handlePrev  = () => { setIsPlaying(false); if (currentPlyIndex > 0) onSelectPly(currentPlyIndex - 1); };
-  const handleNext  = () => { setIsPlaying(false); if (currentPlyIndex < totalPlies) onSelectPly(currentPlyIndex + 1); };
-  const handleLast  = () => { setIsPlaying(false); onSelectPly(totalPlies); };
+  const selectPly = useCallback(
+    (plyIndex: number) => {
+      setIsPlaying(false);
+      onSelectPly(plyIndex);
+    },
+    [onSelectPly],
+  );
+
+  const handleFirst = () => selectPly(0);
+  const handlePrev = () => { if (currentPlyIndex > 0) selectPly(currentPlyIndex - 1); };
+  const handleNext = () => { if (currentPlyIndex < totalPlies) selectPly(currentPlyIndex + 1); };
+  const handleLast = () => selectPly(totalPlies);
 
   const startEdit = useCallback((ply: Ply) => {
     if (!editable) return;
@@ -255,7 +263,7 @@ export const MoveList: React.FC<MoveListProps> = ({
         ) : (
           <button
             type="button"
-            onClick={() => onSelectPly(ply.index)}
+            onClick={() => selectPly(ply.index)}
             onDoubleClick={() => startEdit(ply)}
             onMouseEnter={(e) => { if (editable && hasHints) showTip(e); }}
             onMouseLeave={() => setTip(null)}
