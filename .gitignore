@@ -9,7 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
+debug
 # testing
 /coverage
 
@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# scratch scripts
+scratch/
+
+# local resources/images
+notamate-essentials/

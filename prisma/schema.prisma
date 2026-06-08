@@ -1,0 +1,112 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Plan {
+  FREE
+  PAID
+}
+
+model User {
+  id                    String      @id @default(uuid())
+  username              String      @unique
+  email                 String?     @unique
+  emailVerified         Boolean     @default(false) @map("email_verified")
+  passwordHash          String
+  plan                  Plan        @default(FREE)
+  scanCount             Int         @default(0) // Lifetime scans for Free (capped at 2)
+  subscriptionExpiresAt DateTime?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  savedGames            SavedGame[]
+  resetTokens           PasswordResetToken[]
+  verificationTokens    EmailVerificationToken[]
+  feedback              Feedback[]
+
+  subscriptionId     String?   @map("subscription_id")
+  subscriptionPlan   String?   @map("subscription_plan")
+  subscriptionStatus String?   @map("subscription_status")
+  subscriptionStart  DateTime? @map("subscription_start")
+  subscriptionEnd    DateTime? @map("subscription_end")
+  paymentProvider    String?   @map("payment_provider")
+
+  @@index([subscriptionId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("email_verification_tokens")
+}
+
+model SavedGame {
+  id         String      @id @default(uuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  pgn        String      @db.Text
+  movesJson  String      @db.Text // validated moves JSON string
+  createdAt  DateTime    @default(now())
+  publicLink PublicLink?
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model PublicLink {
+  id        String    @id @default(uuid())
+  gameId    String    @unique
+  game      SavedGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  slug      String    @unique // Unique short token for access control
+  enabled   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String   @db.Text
+  gameId    String?  @map("game_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("feedback")
+}
+
+/** Prevents Razorpay payment signature replay across accounts. */
+model ProcessedPayment {
+  id                     String   @id @default(uuid())
+  razorpayPaymentId      String   @unique @map("razorpay_payment_id")
+  razorpaySubscriptionId String   @map("razorpay_subscription_id")
+  userId                 String   @map("user_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("processed_payments")
+}
