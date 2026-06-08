@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { requireVerifiedUser } from '@/lib/requireAuth';
-import { prisma } from '@/lib/db';
 import { isProUser } from '@/lib/proAccess';
 import { validateChessMoves } from '@/lib/chess-validator';
 import { apiError, validateImageUpload } from '@/lib/security';
 import { rateLimitByIp } from '@/lib/rateLimit';
+import {
+  getCurrentMonthKey,
+  getScanLimitErrorMessage,
+  getScanUsage,
+  reserveFreeScan,
+  reserveProScan,
+  rollbackFreeScan,
+  rollbackProScan,
+} from '@/lib/scanLimits';
 
 let cachedAiClient: GoogleGenAI | null = null;
 
@@ -16,20 +24,14 @@ function getAiClient(apiKey: string) {
   return cachedAiClient;
 }
 
-async function reserveFreeScan(userId: string): Promise<boolean> {
-  const result = await prisma.user.updateMany({
-    where: { id: userId, plan: 'FREE', scanCount: { lt: 2 } },
-    data: { scanCount: { increment: 1 } },
-  });
-  return result.count === 1;
-}
-
 export async function POST(req: NextRequest) {
   const limited = rateLimitByIp(req, 'extract', 20, 60 * 60_000);
   if (limited) return limited;
 
   const apiStartTime = Date.now();
   let scanReservedForUserId: string | null = null;
+  let scanReservedAsPro = false;
+  let scanReservedMonthKey: string | null = null;
 
   try {
     const auth = await requireVerifiedUser();
@@ -37,25 +39,39 @@ export async function POST(req: NextRequest) {
     const user = auth.user;
 
     const isPro = isProUser(user);
+    const usage = getScanUsage(user);
 
-    if (!isPro && user.scanCount >= 2) {
+    if (usage.exhausted) {
       return NextResponse.json(
         {
-          error:
-            'Scan limit exceeded. You have already used your 2 free scans. Please upgrade to a Paid plan to unlock unlimited scans.',
+          error: getScanLimitErrorMessage(usage),
           limitExceeded: true,
         },
         { status: 403 },
       );
     }
 
-    if (!isPro) {
+    if (isPro) {
+      const monthKey = getCurrentMonthKey();
+      const reserved = await reserveProScan(user.id, user.subscriptionPlan, monthKey);
+      if (!reserved) {
+        return NextResponse.json(
+          {
+            error: getScanLimitErrorMessage(getScanUsage(user)),
+            limitExceeded: true,
+          },
+          { status: 403 },
+        );
+      }
+      scanReservedForUserId = user.id;
+      scanReservedAsPro = true;
+      scanReservedMonthKey = monthKey;
+    } else {
       const reserved = await reserveFreeScan(user.id);
       if (!reserved) {
         return NextResponse.json(
           {
-            error:
-              'Scan limit exceeded. You have already used your 2 free scans. Please upgrade to a Paid plan to unlock unlimited scans.',
+            error: getScanLimitErrorMessage(getScanUsage(user)),
             limitExceeded: true,
           },
           { status: 403 },
@@ -201,12 +217,11 @@ UNCERTAINTY:
   } catch (error: unknown) {
     console.error('[Extract API] ── END (error) ────────────────────────────────');
     if (scanReservedForUserId) {
-      await prisma.user
-        .updateMany({
-          where: { id: scanReservedForUserId, scanCount: { gt: 0 } },
-          data: { scanCount: { decrement: 1 } },
-        })
-        .catch((err) => console.error('[Extract API] Scan rollback failed:', err));
+      if (scanReservedAsPro) {
+        await rollbackProScan(scanReservedForUserId, scanReservedMonthKey ?? getCurrentMonthKey());
+      } else {
+        await rollbackFreeScan(scanReservedForUserId);
+      }
     }
     return apiError('Extract API', error, 'Extraction failed. Please try again.');
   }

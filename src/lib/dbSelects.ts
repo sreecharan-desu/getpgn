@@ -7,6 +7,8 @@ export const userSessionSelect = {
   emailVerified: true,
   plan: true,
   scanCount: true,
+  monthlyScanCount: true,
+  monthlyScanMonth: true,
   subscriptionExpiresAt: true,
   subscriptionId: true,
   subscriptionPlan: true,

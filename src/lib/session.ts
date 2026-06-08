@@ -22,6 +22,8 @@ export type SessionUser = Pick<
   | 'emailVerified'
   | 'plan'
   | 'scanCount'
+  | 'monthlyScanCount'
+  | 'monthlyScanMonth'
   | 'subscriptionExpiresAt'
   | 'subscriptionId'
   | 'subscriptionPlan'

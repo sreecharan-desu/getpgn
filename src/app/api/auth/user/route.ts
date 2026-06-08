@@ -28,6 +28,8 @@ export async function GET() {
         plan: user.plan,
         emailVerified: user.emailVerified,
         scanCount: user.scanCount,
+        monthlyScanCount: user.monthlyScanCount,
+        monthlyScanMonth: user.monthlyScanMonth,
         subscriptionExpiresAt: user.subscriptionExpiresAt,
         subscriptionId: user.subscriptionId,
         subscriptionPlan: user.subscriptionPlan,

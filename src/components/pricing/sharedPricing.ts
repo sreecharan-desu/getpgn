@@ -1,5 +1,6 @@
 export const PRO_CORE_FEATURES = [
-  "Unlimited scoresheet scans",
+  "100 scans/month (monthly plan)",
+  "1,000 scans/month (yearly plan)",
   "Cloud library & board previews",
   "Shareable interactive replays",
   "PGN export anytime",

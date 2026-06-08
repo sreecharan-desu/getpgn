@@ -20,6 +20,8 @@ model User {
   passwordHash          String
   plan                  Plan        @default(FREE)
   scanCount             Int         @default(0) // Lifetime scans for Free (capped at 2)
+  monthlyScanCount      Int         @default(0) @map("monthly_scan_count") // Pro scans in current month
+  monthlyScanMonth      String?     @map("monthly_scan_month") // YYYY-MM billing month key
   subscriptionExpiresAt DateTime?
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt

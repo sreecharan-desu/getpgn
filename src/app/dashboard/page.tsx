@@ -61,6 +61,8 @@ export default async function DashboardPage() {
     username: user.username,
     plan: user.plan,
     scanCount: user.scanCount,
+    monthlyScanCount: user.monthlyScanCount,
+    monthlyScanMonth: user.monthlyScanMonth,
     subscriptionId: user.subscriptionId,
     subscriptionPlan: user.subscriptionPlan,
     subscriptionStatus: user.subscriptionStatus,

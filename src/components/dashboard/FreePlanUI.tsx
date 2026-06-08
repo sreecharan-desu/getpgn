@@ -4,18 +4,25 @@ import {
   History,
   Share2,
   ShieldCheck,
-  Infinity as InfinityIcon,
   Lock,
   Check,
   Download,
   PenLine,
+  ScanLine,
 } from 'lucide-react';
 import { QueenMark } from '@/components/ui/Logo';
+import {
+  FREE_SCAN_LIMIT,
+  PRO_MONTHLY_PLAN_SCAN_LIMIT,
+  PRO_YEARLY_PLAN_SCAN_LIMIT,
+  type ScanTier,
+} from '@/lib/scanLimits';
 
-export const FREE_SCAN_LIMIT = 2;
+export { FREE_SCAN_LIMIT };
 
 const PRO_FEATURES = [
-  { icon: InfinityIcon, label: 'Unlimited scoresheet scans' },
+  { icon: ScanLine, label: `${PRO_MONTHLY_PLAN_SCAN_LIMIT} scans/month (monthly plan)` },
+  { icon: ScanLine, label: `${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()} scans/month (yearly plan)` },
   { icon: History, label: 'Cloud library with board previews' },
   { icon: Share2, label: 'Shareable interactive replays' },
   { icon: Download, label: 'PGN export & download anytime' },
@@ -25,7 +32,7 @@ const PRO_FEATURES = [
 ] as const;
 
 const FREE_VS_PRO = [
-  { feature: 'Scoresheet scans', free: '2 total', pro: 'Unlimited' },
+  { feature: 'Scoresheet scans', free: '2 total', pro: `${PRO_MONTHLY_PLAN_SCAN_LIMIT}/mo · ${PRO_YEARLY_PLAN_SCAN_LIMIT.toLocaleString()}/mo` },
   { feature: 'Move validation', free: true, pro: true },
   { feature: 'PGN export (session)', free: true, pro: true },
   { feature: 'Saved game library', free: false, pro: true },
@@ -57,22 +64,27 @@ function CellValue({ value }: { value: boolean | string }) {
 interface ScanUsageMeterProps {
   used: number;
   limit?: number;
+  tier?: ScanTier;
+  planLabel?: string;
   onUpgrade?: () => void;
   compact?: boolean;
   className?: string;
 }
 
-/** Visual scan quota — makes free-tier limits obvious at a glance. */
+/** Visual scan quota — free lifetime limit or pro monthly allowance. */
 export function ScanUsageMeter({
   used,
   limit = FREE_SCAN_LIMIT,
+  tier = 'free',
+  planLabel = 'Free plan',
   onUpgrade,
   compact = false,
   className = '',
 }: ScanUsageMeterProps) {
   const remaining = Math.max(0, limit - used);
   const exhausted = used >= limit;
-  const pct = Math.min(100, (used / limit) * 100);
+  const pct = Math.min(100, limit > 0 ? (used / limit) * 100 : 0);
+  const isPro = tier === 'pro';
 
   return (
     <div
@@ -83,10 +95,12 @@ export function ScanUsageMeter({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-2">
-            Free plan
+            {planLabel}
           </p>
           <p className="mt-1 text-[15px] font-bold text-ink">
-            {exhausted ? 'No scans left' : `${remaining} scan${remaining === 1 ? '' : 's'} remaining`}
+            {exhausted
+              ? 'No scans left'
+              : `${remaining.toLocaleString()} scan${remaining === 1 ? '' : 's'} remaining`}
           </p>
         </div>
         <span
@@ -98,7 +112,7 @@ export function ScanUsageMeter({
                 : 'bg-warn-bg text-warn border border-line-strong'
           }`}
         >
-          {used}/{limit}
+          {used.toLocaleString()}/{limit.toLocaleString()}
         </span>
       </div>
 
@@ -112,19 +126,23 @@ export function ScanUsageMeter({
           aria-valuenow={used}
           aria-valuemin={0}
           aria-valuemax={limit}
-          aria-label={`${used} of ${limit} free scans used`}
+          aria-label={`${used} of ${limit} scans used`}
         />
       </div>
 
       <p className="mt-3 text-[12px] leading-relaxed text-muted">
         {exhausted
-          ? 'Upgrade to Pro for unlimited digitizing and a permanent game library.'
-          : used === 0
-            ? 'Try digitizing up to 2 scoresheets — no card required.'
-            : 'Export PGN from each session. Upgrade to save games forever.'}
+          ? isPro
+            ? 'Your monthly scan quota is used up. It resets at the start of next month.'
+            : 'Upgrade to Pro for monthly scan allowances and a permanent game library.'
+          : isPro
+            ? 'Monthly allowance resets on the 1st of each month.'
+            : used === 0
+              ? 'Try digitizing up to 2 scoresheets — no card required.'
+              : 'Export PGN from each session. Upgrade to save games forever.'}
       </p>
 
-      {onUpgrade && (
+      {onUpgrade && !isPro && (
         <button
           type="button"
           onClick={onUpgrade}

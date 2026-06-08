@@ -63,6 +63,8 @@ export async function DELETE() {
         plan: 'FREE',
         subscriptionExpiresAt: null,
         scanCount: 0,
+        monthlyScanCount: 0,
+        monthlyScanMonth: null,
         subscriptionId: null,
         subscriptionPlan: null,
         subscriptionStatus: null,

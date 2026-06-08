@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
 import { toast } from "sonner";
@@ -78,6 +78,7 @@ import {
   MessageSquare,
   LayoutGrid,
   Download,
+  Search,
 } from "lucide-react";
 
 import { RazorpayLogo } from "@/components/ui/RazorpayLogo";
@@ -85,6 +86,8 @@ import {
   consumePendingUpgrade,
   openRazorpayCheckout,
 } from "@/lib/razorpayCheckout";
+import { getCurrentMonthKey, getScanUsage } from "@/lib/scanLimits";
+import { filterSavedGames } from "@/lib/savedGameSearch";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -156,6 +159,8 @@ interface User {
   username: string;
   plan: "FREE" | "PAID";
   scanCount: number;
+  monthlyScanCount: number;
+  monthlyScanMonth: string | null;
   subscriptionId?: string | null;
   subscriptionPlan?: string | null;
   subscriptionStatus?: string | null;
@@ -240,6 +245,7 @@ export default function DashboardClient({
   const [deleting, setDeleting] = useState<boolean>(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
+  const [gameSearchQuery, setGameSearchQuery] = useState("");
   const reduceMotion = useReducedMotion();
 
   const isPro =
@@ -248,6 +254,13 @@ export default function DashboardClient({
     (user.subscriptionStatus === "cancelled" &&
       user.subscriptionEnd &&
       new Date(user.subscriptionEnd) > new Date());
+
+  const scanUsage = getScanUsage(user);
+  const scansExhausted = scanUsage.exhausted;
+  const filteredGames = useMemo(
+    () => filterSavedGames(games, gameSearchQuery),
+    [games, gameSearchQuery],
+  );
 
   // App view state
   const [appState, setAppState] = useState<"upload" | "extracting" | "review">(
@@ -605,10 +618,18 @@ export default function DashboardClient({
         throw new Error("Invalid format returned by extraction engine");
       }
 
-      if (user.plan === "FREE") {
+      if (!isPro) {
         setUser((prev) => ({
           ...prev,
-          scanCount: Math.min(2, prev.scanCount + 1),
+          scanCount: Math.min(FREE_SCAN_LIMIT, prev.scanCount + 1),
+        }));
+      } else {
+        const monthKey = getCurrentMonthKey();
+        setUser((prev) => ({
+          ...prev,
+          monthlyScanMonth: monthKey,
+          monthlyScanCount:
+            prev.monthlyScanMonth === monthKey ? prev.monthlyScanCount + 1 : 1,
         }));
       }
 
@@ -1012,6 +1033,36 @@ export default function DashboardClient({
     };
   };
 
+  const renderScanUsageMeter = (opts?: { compact?: boolean }) => (
+    <ScanUsageMeter
+      used={scanUsage.used}
+      limit={scanUsage.limit}
+      tier={scanUsage.tier}
+      planLabel={scanUsage.planLabel}
+      compact={opts?.compact}
+      onUpgrade={!isPro ? () => setShowPricingModal(true) : undefined}
+    />
+  );
+
+  const renderGameSearchInput = (opts?: { compact?: boolean }) => (
+    <div className={`relative ${opts?.compact ? "mb-2.5" : "mb-3"}`}>
+      <Search
+        className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2"
+        aria-hidden="true"
+      />
+      <input
+        type="search"
+        value={gameSearchQuery}
+        onChange={(e) => setGameSearchQuery(e.target.value)}
+        placeholder="Search by title, date, or move…"
+        aria-label="Search saved games"
+        className={`w-full rounded-xl border border-line bg-paper pl-9 pr-3 text-ink placeholder:text-muted-2 focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10 ${
+          opts?.compact ? "py-2 text-[12px]" : "py-2.5 text-[13px]"
+        }`}
+      />
+    </div>
+  );
+
   const renderSavedGamesPanel = () => {
     const renderGameRow = (game: SavedGame, idx: number) => {
       let turnCount = 0;
@@ -1122,6 +1173,7 @@ export default function DashboardClient({
             </span>
           )}
         </div>
+        {isPro && games.length > 0 && renderGameSearchInput({ compact: true })}
         <div className="relative min-h-0">
           <div className="overflow-y-auto space-y-1.5 -mx-1 px-1 pb-1 max-h-[min(420px,calc(100vh-280px))] scroll-smooth [scrollbar-gutter:stable]">
             {isPro ? (
@@ -1138,8 +1190,15 @@ export default function DashboardClient({
                     with a board preview.
                   </p>
                 </div>
+              ) : filteredGames.length === 0 ? (
+                <div className="text-center py-10 px-4">
+                  <p className="text-[12px] font-semibold text-ink">No matches</p>
+                  <p className="mt-1 text-[11px] text-muted">
+                    Try a different title, date, or move notation.
+                  </p>
+                </div>
               ) : (
-                <div className="space-y-1.5">{games.map(renderGameRow)}</div>
+                <div className="space-y-1.5">{filteredGames.map(renderGameRow)}</div>
               )
             ) : (
               <div className="relative overflow-hidden p-5 rounded-xl border border-line-strong bg-paper text-center space-y-4 mt-1">
@@ -1166,8 +1225,8 @@ export default function DashboardClient({
                     History Locked
                   </h3>
                   <p className="text-[12px] text-muted leading-relaxed">
-                    Keep every game forever. Pro saves unlimited scans with
-                    shareable replays.
+                    Keep every game forever. Pro includes monthly scan allowances
+                    and shareable replays.
                   </p>
                 </div>
                 <button
@@ -1189,10 +1248,12 @@ export default function DashboardClient({
         </div>
         {isPro && games.length > 0 && (
           <p className="mt-2 px-1 text-[11px] text-muted-2 leading-relaxed">
-            {games.length === 1
-              ? "1 saved game"
-              : `${games.length} saved games`}
-            {games.length > 4 ? " · scroll for more" : ""}
+            {gameSearchQuery.trim()
+              ? `${filteredGames.length} of ${games.length} games`
+              : games.length === 1
+                ? "1 saved game"
+                : `${games.length} saved games`}
+            {filteredGames.length > 4 ? " · scroll for more" : ""}
           </p>
         )}
       </div>
@@ -1200,7 +1261,7 @@ export default function DashboardClient({
   };
 
   const renderUploadScanLimitBanner = () =>
-    !isPro && user.scanCount >= FREE_SCAN_LIMIT ? (
+    scansExhausted ? (
       <div
         className={`${UPLOAD_FOCUS} relative overflow-hidden rounded-[20px] border border-line/50 bg-surface/30 px-5 py-5 gp-fade-up`}
       >
@@ -1210,20 +1271,23 @@ export default function DashboardClient({
           </span>
           <div className="min-w-0 flex-1 space-y-1">
             <span className="block text-[15px] font-semibold text-ink">
-              All free scans used
+              {isPro ? "Monthly scan limit reached" : "All free scans used"}
             </span>
             <span className="block text-[13px] leading-relaxed text-muted">
-              Upgrade for unlimited digitizing, a permanent library, and
-              shareable replays.
+              {isPro
+                ? `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this month. Your quota resets on the 1st.`
+                : "Upgrade for monthly scan allowances, a permanent library, and shareable replays."}
             </span>
           </div>
-          <button
-            onClick={() => setShowPricingModal(true)}
-            className="btn-primary btn-sm shrink-0 cursor-pointer"
-          >
-            <QueenMark className="h-3 w-3" />
-            View plans
-          </button>
+          {!isPro && (
+            <button
+              onClick={() => setShowPricingModal(true)}
+              className="btn-primary btn-sm shrink-0 cursor-pointer"
+            >
+              <QueenMark className="h-3 w-3" />
+              View plans
+            </button>
+          )}
         </div>
       </div>
     ) : null;
@@ -1274,7 +1338,7 @@ export default function DashboardClient({
             <button
               type="button"
               onClick={handleExtractMoves}
-              disabled={!isPro && user.scanCount >= FREE_SCAN_LIMIT}
+              disabled={scansExhausted}
               className="gp-digitize-cta"
             >
               <span className="gp-digitize-cta__label">
@@ -1355,7 +1419,10 @@ export default function DashboardClient({
       </p>
       <ul className="mt-3 space-y-2.5">
         {[
-          { icon: InfinityIcon, text: "Unlimited digitizing" },
+          {
+            icon: InfinityIcon,
+            text: `${scanUsage.limit.toLocaleString()} scans/month on your plan`,
+          },
           { icon: History, text: "Cloud game library" },
           { icon: Share2, text: "Shareable replay links" },
         ].map(({ icon: Icon, text }) => (
@@ -1391,6 +1458,12 @@ export default function DashboardClient({
           </span>
         </div>
 
+        {games.length > 0 && (
+          <div className="border-b border-line/40 px-4 py-3 sm:px-5">
+            {renderGameSearchInput({ compact: true })}
+          </div>
+        )}
+
         <div
           className={`divide-y divide-line/35 overflow-y-auto scroll-smooth [scrollbar-gutter:stable] ${
             wide
@@ -1398,7 +1471,15 @@ export default function DashboardClient({
               : "max-h-[min(280px,36vh)]"
           }`}
         >
-          {games.map((game) => {
+          {filteredGames.length === 0 && gameSearchQuery.trim() ? (
+            <div className="px-4 py-10 text-center sm:px-5">
+              <p className="text-[13px] font-semibold text-ink">No matches</p>
+              <p className="mt-1 text-[12px] text-muted">
+                Try another title, date, or move.
+              </p>
+            </div>
+          ) : null}
+          {filteredGames.map((game) => {
             let turnCount = 0;
             if (game.movesJson) {
               try {
@@ -1589,40 +1670,43 @@ export default function DashboardClient({
 
   const renderUploadScreen = () => {
     const hasLibrary = isPro && games.length > 0;
-    const scansExhausted = !isPro && user.scanCount >= FREE_SCAN_LIMIT;
     const showHero = !imageUrl && !selectedFile;
 
     const hero = showHero ? (
       <div className={`${UPLOAD_FOCUS} text-center gp-fade-up`}>
         {renderUploadGreeting({ centered: true })}
-        {!isPro && (
-          <div className="mb-4 mt-4 flex flex-wrap items-center justify-center gap-2">
-            <span className="chip">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${scansExhausted ? "bg-danger" : "bg-positive"}`}
-              />
-              Free plan ·{" "}
-              <span className="gp-nums">
-                {user.scanCount}/{FREE_SCAN_LIMIT}
-              </span>{" "}
-              scans used
-            </span>
-          </div>
-        )}
+        <div className="mb-4 mt-4 flex flex-wrap items-center justify-center gap-2">
+          <span className="chip">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${scansExhausted ? "bg-danger" : "bg-positive"}`}
+            />
+            {scanUsage.planLabel} ·{" "}
+            <span className="gp-nums">
+              {scanUsage.used.toLocaleString()}/{scanUsage.limit.toLocaleString()}
+            </span>{" "}
+            scans used
+            {isPro ? " this month" : ""}
+          </span>
+        </div>
         <h1 className="mt-3 text-[clamp(1.375rem,4vw,1.75rem)] font-semibold tracking-tight text-ink leading-snug">
           {scansExhausted
-            ? "Upgrade to keep digitizing"
+            ? isPro
+              ? "Monthly scan limit reached"
+              : "Upgrade to keep digitizing"
             : "Digitize your chess games"}
         </h1>
         <p className="mx-auto mt-2 max-w-[22rem] text-[14px] leading-relaxed text-muted">
           {scansExhausted
-            ? "You've used both free scans. Upgrade for unlimited scoresheets and shareable replays."
+            ? isPro
+              ? `You've used all ${scanUsage.limit.toLocaleString()} scans for this month. Your quota resets on the 1st.`
+              : "You've used both free scans. Upgrade for monthly scan allowances and shareable replays."
             : "Upload a handwritten scoresheet — we extract moves, validate the game, and export clean PGN."}
         </p>
-        {!isPro && !scansExhausted && (
+        {!scansExhausted && (
           <p className="mt-3 text-[12px] text-muted-2">
-            No credit card · {FREE_SCAN_LIMIT - user.scanCount} free scan
-            {FREE_SCAN_LIMIT - user.scanCount === 1 ? "" : "s"} left
+            {isPro
+              ? `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this month`
+              : `No credit card · ${scanUsage.remaining} free scan${scanUsage.remaining === 1 ? "" : "s"} left`}
           </p>
         )}
       </div>
@@ -1647,7 +1731,8 @@ export default function DashboardClient({
               {renderUploadLibraryInsights()}
               {renderUploadProPerks()}
             </div>
-            <div className="min-w-0 space-y-4">
+            <div className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
+              {renderScanUsageMeter({ compact: true })}
               {!imageUrl ? (
                 <div className="flex items-center gap-3 px-1">
                   <div className="h-px flex-1 bg-line/45" />
@@ -1677,10 +1762,7 @@ export default function DashboardClient({
               {!imageUrl && renderUploadFeaturePills()}
             </div>
             <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-              <ScanUsageMeter
-                used={user.scanCount}
-                onUpgrade={() => setShowPricingModal(true)}
-              />
+              {renderScanUsageMeter()}
               <FreeVsProTable
                 compact
                 onUpgrade={() => setShowPricingModal(true)}
@@ -1704,6 +1786,7 @@ export default function DashboardClient({
             {!imageUrl && renderUploadFeaturePills(true)}
           </div>
           <div className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
+            {renderScanUsageMeter({ compact: true })}
             {renderUploadScanLimitBanner()}
             {renderUploadError()}
             {renderUploadFormCard({ showHeading: !imageUrl, wide: true })}
@@ -1918,7 +2001,7 @@ export default function DashboardClient({
             }));
             setShowPricingModal(false);
             toast.success("Welcome to GetPGN Pro", {
-              description: "Pro is active instantly. Enjoy unlimited scans.",
+              description: `Pro is active instantly. ${scanUsage.limit.toLocaleString()} scans/month on your plan.`,
             });
             router.refresh();
           } finally {
@@ -2028,6 +2111,8 @@ export default function DashboardClient({
         ...prev,
         plan: "FREE",
         scanCount: 0,
+        monthlyScanCount: 0,
+        monthlyScanMonth: null,
       }));
       setGames([]);
       handleReset();
@@ -2664,61 +2749,59 @@ export default function DashboardClient({
             </button>
           </div>
           <div className="flex min-w-0 items-center gap-2 sm:gap-3.5">
-            {!isPro && (
-              <div className="flex items-center gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowPricingModal(true)}
-                  className="hidden sm:flex items-center gap-2 rounded-full border border-line-strong bg-surface pl-2.5 pr-3 py-1.5 text-[12px] text-muted transition-colors hover:border-ink hover:text-ink cursor-pointer"
-                  title="Free scan usage"
-                >
-                  <span className="relative grid h-7 w-7 place-items-center">
-                    <svg
-                      className="absolute inset-0 h-7 w-7 -rotate-90"
-                      viewBox="0 0 28 28"
-                      aria-hidden="true"
-                    >
-                      <circle
-                        cx="14"
-                        cy="14"
-                        r="11"
-                        fill="none"
-                        stroke="var(--color-line-strong)"
-                        strokeWidth="2.5"
-                      />
-                      <circle
-                        cx="14"
-                        cy="14"
-                        r="11"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeDasharray={`${(user.scanCount / FREE_SCAN_LIMIT) * 69.1} 69.1`}
-                        className={
-                          user.scanCount >= FREE_SCAN_LIMIT
-                            ? "text-danger"
-                            : "text-ink"
-                        }
-                      />
-                    </svg>
-                    <span className="text-[10px] font-bold text-ink gp-nums">
-                      {FREE_SCAN_LIMIT - user.scanCount}
-                    </span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => !isPro && setShowPricingModal(true)}
+                className="hidden sm:flex items-center gap-2 rounded-full border border-line-strong bg-surface pl-2.5 pr-3 py-1.5 text-[12px] text-muted transition-colors hover:border-ink hover:text-ink cursor-pointer"
+                title="Scan usage"
+              >
+                <span className="relative grid h-7 w-7 place-items-center">
+                  <svg
+                    className="absolute inset-0 h-7 w-7 -rotate-90"
+                    viewBox="0 0 28 28"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="14"
+                      cy="14"
+                      r="11"
+                      fill="none"
+                      stroke="var(--color-line-strong)"
+                      strokeWidth="2.5"
+                    />
+                    <circle
+                      cx="14"
+                      cy="14"
+                      r="11"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeDasharray={`${scanUsage.limit > 0 ? (scanUsage.used / scanUsage.limit) * 69.1 : 0} 69.1`}
+                      className={scansExhausted ? "text-danger" : "text-ink"}
+                    />
+                  </svg>
+                  <span className="text-[10px] font-bold text-ink gp-nums">
+                    {scanUsage.remaining > 99 ? "99+" : scanUsage.remaining}
                   </span>
-                  <span>
-                    <strong className="text-ink gp-nums">
-                      {user.scanCount}/{FREE_SCAN_LIMIT}
-                    </strong>{" "}
-                    scans
-                  </span>
-                </button>
-                <span className="text-[12px] text-muted flex sm:hidden items-center gap-1.5">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-ink/70" />
-                  <strong className="text-ink gp-nums">
-                    {user.scanCount}/{FREE_SCAN_LIMIT}
-                  </strong>
                 </span>
+                <span>
+                  <strong className="text-ink gp-nums">
+                    {scanUsage.used.toLocaleString()}/
+                    {scanUsage.limit.toLocaleString()}
+                  </strong>{" "}
+                  scans{isPro ? "/mo" : ""}
+                </span>
+              </button>
+              <span className="text-[12px] text-muted flex sm:hidden items-center gap-1.5">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-ink/70" />
+                <strong className="text-ink gp-nums">
+                  {scanUsage.used.toLocaleString()}/
+                  {scanUsage.limit.toLocaleString()}
+                </strong>
+              </span>
+              {!isPro && (
                 <button
                   onClick={() => setShowPricingModal(true)}
                   disabled={billingLoading}
@@ -2727,8 +2810,8 @@ export default function DashboardClient({
                   <QueenMark className="w-3.5 h-3.5" />
                   Upgrade
                 </button>
-              </div>
-            )}
+              )}
+            </div>
             {isDevMode && (
               <div className="items-center gap-1.5 hidden md:flex">
                 {!isPro ? (
@@ -3259,10 +3342,7 @@ export default function DashboardClient({
               </div>
 
               <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start shrink-0">
-                <ScanUsageMeter
-                  used={user.scanCount}
-                  onUpgrade={() => setShowPricingModal(true)}
-                />
+                {renderScanUsageMeter({ compact: true })}
                 <section className="relative overflow-hidden bg-ink text-paper rounded-2xl p-4 gp-fade-up">
                   <div className="absolute -right-4 -top-6 opacity-[0.08] pointer-events-none">
                     <QueenMark className="w-28 h-28" />
@@ -3273,7 +3353,7 @@ export default function DashboardClient({
                       Unlock Pro
                     </h2>
                     <p className="text-[11px] text-paper/70 leading-relaxed">
-                      Unlimited scans, saved library, and shareable replays.
+                      Monthly scan allowances, saved library, and shareable replays.
                     </p>
                     <button
                       onClick={() => setShowPricingModal(true)}
@@ -3324,6 +3404,19 @@ export default function DashboardClient({
               </section>
 
               {renderAccountProfileSection()}
+
+              <section className="bg-surface border border-line rounded-2xl overflow-hidden gp-fade-up shrink-0">
+                <div className="px-4 sm:px-5 py-3 border-b border-line flex items-center gap-2">
+                  <History className="w-4 h-4 text-muted" />
+                  <h2 className="font-semibold text-ink text-[14px]">
+                    Scan usage
+                  </h2>
+                </div>
+                <div className="p-4 sm:px-5 sm:py-4">
+                  {renderScanUsageMeter({ compact: true })}
+                </div>
+              </section>
+
               {renderAccountProBillingBlock()}
             </div>
           )}

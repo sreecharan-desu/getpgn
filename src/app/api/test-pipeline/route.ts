@@ -4,6 +4,13 @@ import sharp from 'sharp';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
 import { isProUser } from '@/lib/proAccess';
+import {
+  getScanLimitErrorMessage,
+  getScanUsage,
+  reserveFreeScan,
+  reserveProScan,
+  getCurrentMonthKey,
+} from '@/lib/scanLimits';
 import { validateChessMoves } from '@/lib/chess-validator';
 import { isDevRouteAllowed, devRouteBlockedResponse } from '@/lib/security';
 
@@ -40,13 +47,31 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return auth.response;
     const user = auth.user;
 
-    // Gating check: block free users with >= 2 scans
     const isPro = isProUser(user);
-    if (!isPro && user.scanCount >= 2) {
+    const usage = getScanUsage(user);
+    if (usage.exhausted) {
       return NextResponse.json({
-        error: 'Scan limit exceeded. You have already used your 2 free scans. Please upgrade to a Paid plan to unlock unlimited scans.',
-        limitExceeded: true
+        error: getScanLimitErrorMessage(usage),
+        limitExceeded: true,
       }, { status: 403 });
+    }
+
+    if (isPro) {
+      const reserved = await reserveProScan(user.id, user.subscriptionPlan, getCurrentMonthKey());
+      if (!reserved) {
+        return NextResponse.json({
+          error: getScanLimitErrorMessage(getScanUsage(user)),
+          limitExceeded: true,
+        }, { status: 403 });
+      }
+    } else {
+      const reserved = await reserveFreeScan(user.id);
+      if (!reserved) {
+        return NextResponse.json({
+          error: getScanLimitErrorMessage(getScanUsage(user)),
+          limitExceeded: true,
+        }, { status: 403 });
+      }
     }
 
     const apiKey = process.env.AI_API_KEY;
@@ -238,13 +263,6 @@ Rules:
     const pgnIsPartial = hasIllegal && !hasRecovered && appliedMovesCount < movesDetected;
     const pgnHasRecoveries = hasRecovered;
 
-    if (!isPro) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { scanCount: { increment: 1 } }
-      });
-    }
-
     return NextResponse.json({
       processing_time_ms: totalTimeMs,
       ai_time_ms: aiTimeMs,
@@ -259,7 +277,7 @@ Rules:
       pgn_is_partial: pgnIsPartial,
       pgn_has_recoveries: pgnHasRecoveries,
       moves: rawMovesList,
-      scan_count: !isPro ? user.scanCount + 1 : undefined
+      scan_count: usage.used + 1,
     });
 
   } catch (error) {
