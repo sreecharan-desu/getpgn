@@ -235,6 +235,8 @@ function computeMoveStats(turns: Turn[]) {
 
 /** Shared horizontal rhythm — keeps dashboard readable on wide screens. */
 const DASHBOARD_SHELL = "mx-auto w-full max-w-6xl";
+/** Account settings — slightly wider so forms breathe on large displays. */
+const ACCOUNT_SHELL = "mx-auto w-full max-w-7xl 2xl:max-w-[1320px]";
 const PREMIUM_PANEL = "gp-premium-panel";
 const PREMIUM_PANEL_HEAD =
   "border-b border-line/60 bg-surface-2/35 px-4 sm:px-5 py-3.5 flex items-center gap-2 shrink-0";
@@ -2332,47 +2334,49 @@ export default function DashboardClient({
   };
 
   const renderAccountIdentityCard = () => (
-    <section className={`${PREMIUM_PANEL} p-4 sm:p-5 gp-fade-up shrink-0`}>
-      <div className="flex items-center gap-3 sm:gap-4">
-        <div className="relative shrink-0">
-          <UserAvatar name={user.username} size={52} />
-          {isPro ? (
-            <span
-              className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
-              title="Pro member"
-            >
-              <Sparkles className="w-2.5 h-2.5 text-ink" />
-            </span>
-          ) : null}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-bold text-ink tracking-tight truncate">
-            {user.username}
-          </h2>
-          {user.email ? (
-            <p className="mt-0.5 text-[13px] text-muted truncate">{user.email}</p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+    <section className={`${PREMIUM_PANEL} p-4 sm:p-5 lg:px-6 lg:py-5 gp-fade-up shrink-0`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="relative shrink-0">
+            <UserAvatar name={user.username} size={52} />
             {isPro ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2 rounded-full bg-ink text-paper">
-                <Sparkles className="w-2.5 h-2.5" />
-                GetPGN Pro
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2 rounded-full bg-surface-2 border border-line-strong text-muted">
-                Free plan
-              </span>
-            )}
-            {isPro && user.subscriptionPlan ? (
-              <span className="text-[11px] text-muted capitalize">
-                {user.subscriptionPlan} billing
+              <span
+                className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
+                title="Pro member"
+              >
+                <Sparkles className="w-2.5 h-2.5 text-ink" />
               </span>
             ) : null}
-            <span className="text-[11px] text-muted gp-nums">
-              · {scanUsage.remaining.toLocaleString()}/
-              {scanUsage.limit.toLocaleString()} scans left
-            </span>
           </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-ink tracking-tight truncate">
+              {user.username}
+            </h2>
+            {user.email ? (
+              <p className="mt-0.5 text-[13px] text-muted truncate">{user.email}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:shrink-0 lg:border-l lg:border-line/50 lg:pl-6">
+          {isPro ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2 rounded-full bg-ink text-paper">
+              <Sparkles className="w-2.5 h-2.5" />
+              GetPGN Pro
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2 rounded-full bg-surface-2 border border-line-strong text-muted">
+              Free plan
+            </span>
+          )}
+          {isPro && user.subscriptionPlan ? (
+            <span className="text-[11px] text-muted capitalize">
+              {user.subscriptionPlan} billing
+            </span>
+          ) : null}
+          <span className="text-[11px] text-muted gp-nums">
+            · {scanUsage.remaining.toLocaleString()}/
+            {scanUsage.limit.toLocaleString()} scans left
+          </span>
         </div>
       </div>
     </section>
@@ -2389,7 +2393,7 @@ export default function DashboardClient({
           Profile &amp; security
         </h2>
       </div>
-      <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 min-h-0">
+      <div className="p-4 sm:p-5 grid grid-cols-1 gap-4 min-h-0">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -2399,8 +2403,8 @@ export default function DashboardClient({
           aria-label="Change username"
         >
           <h3 className="text-[13px] font-semibold text-ink">Username</h3>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-2.5">
-            <div className="flex-1 min-w-0">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <div className="min-w-0">
               <IconInput
                 id="account-username"
                 label="Username"
@@ -3527,7 +3531,7 @@ export default function DashboardClient({
       ) : (
         /* Account Settings View */
         <main
-          className={`flex-1 ${DASHBOARD_SHELL} px-4 sm:px-6 md:px-8 py-4 sm:py-6 flex flex-col gap-4 min-h-0 gp-fade-in`}
+          className={`flex-1 ${ACCOUNT_SHELL} px-4 sm:px-6 md:px-8 py-4 sm:py-6 flex flex-col gap-4 min-h-0 gp-fade-in`}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -3547,7 +3551,7 @@ export default function DashboardClient({
           </div>
 
           {!isPro ? (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-5 min-h-0 flex-1">
+            <div className="grid gap-4 min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-6">
               <div className="flex flex-col gap-4 min-w-0 min-h-0">
                 {renderAccountIdentityCard()}
 
@@ -3621,14 +3625,14 @@ export default function DashboardClient({
               </aside>
             </div>
           ) : (
-            <div className="flex flex-col gap-4 min-h-0 flex-1">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 xl:gap-5">
               {renderAccountIdentityCard()}
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-5 min-h-0 lg:items-start">
-                <div className="flex flex-col gap-4 min-w-0">
+              <div className="grid min-h-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)] xl:gap-6">
+                <div className="flex min-w-0 flex-col gap-4">
                   {renderAccountProfileSection()}
                 </div>
-                <div className="flex flex-col gap-4 min-w-0 lg:sticky lg:top-20">
+                <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-20">
                   {renderAccountProBillingBlock()}
                 </div>
               </div>
