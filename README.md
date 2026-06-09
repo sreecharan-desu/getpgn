@@ -65,7 +65,9 @@ Powered by Next.js 15, Prisma, python-chess validation, and advanced Gemini Mult
    - `AI_API_KEY`: Your Google Gemini API Key.
    - `JWT_SECRET`: Random hash for JWT authentication.
    - `RESEND_API_KEY`: API Key from Resend.
-   - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Razorpay keys.
+   - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Matching Test or Live keys from Razorpay.
+   - `RAZORPAY_MONTHLY_PLAN_ID` / `RAZORPAY_YEARLY_PLAN_ID`: Subscription plan IDs.
+   - `RAZORPAY_WEBHOOK_SECRET`: Webhook signing secret for subscription events.
 
 5. Initialize Database:
    ```bash
