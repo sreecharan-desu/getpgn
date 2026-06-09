@@ -99,6 +99,36 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case 'subscription.paused': {
+        if (user.subscriptionStatus === 'paused') {
+          console.log(`[Razorpay Webhook] Duplicate subscription.paused event. Skipping.`);
+          break;
+        }
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionStatus: 'paused',
+          },
+        });
+        console.log(`[Razorpay Webhook] User ${user.username}'s subscription paused.`);
+        break;
+      }
+
+      case 'subscription.resumed': {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionStatus: 'active',
+            subscriptionStart: start,
+            subscriptionEnd: end,
+            ...(end ? { subscriptionExpiresAt: end } : {}),
+          },
+        });
+        console.log(`[Razorpay Webhook] User ${user.username}'s subscription resumed.`);
+        break;
+      }
+
       case 'subscription.cancelled': {
         if (user.subscriptionStatus === 'cancelled') {
           console.log(`[Razorpay Webhook] Duplicate subscription.cancelled event. Skipping update.`);

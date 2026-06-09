@@ -85,6 +85,8 @@ import {
   LayoutGrid,
   Download,
   Search,
+  Pause,
+  Play,
 } from "lucide-react";
 
 import { RazorpayLogo } from "@/components/ui/RazorpayLogo";
@@ -97,6 +99,7 @@ import {
   getScanPeriodKey,
   getScanUsage,
 } from "@/lib/scanLimits";
+import { isProUser } from "@/lib/proAccess";
 import { filterSavedGames } from "@/lib/savedGameSearch";
 import { validateChessMoves } from "@/lib/chess-validator";
 
@@ -252,6 +255,7 @@ export default function DashboardClient({
     "monthly" | "yearly"
   >("yearly");
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
+  const [showPauseConfirm, setShowPauseConfirm] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<SavedGame | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
@@ -259,12 +263,7 @@ export default function DashboardClient({
   const [gameSearchQuery, setGameSearchQuery] = useState("");
   const reduceMotion = useReducedMotion();
 
-  const isPro =
-    user.plan === "PAID" ||
-    user.subscriptionStatus === "active" ||
-    (user.subscriptionStatus === "cancelled" &&
-      user.subscriptionEnd &&
-      new Date(user.subscriptionEnd) > new Date());
+  const isPro = isProUser(user);
 
   const scanUsage = getScanUsage(user);
   const scansExhausted = scanUsage.exhausted;
@@ -2091,6 +2090,77 @@ export default function DashboardClient({
     }
   };
 
+  const handlePauseSubscription = async () => {
+    setBillingLoading(true);
+    try {
+      const res = await fetch("/api/subscription/pause", { method: "POST" });
+      if (!res.ok) {
+        const apiErr = await readApiErrorOrLogout(
+          res,
+          "We couldn't pause your subscription. Please try again.",
+        );
+        if (apiErr === null) return;
+        throw new Error(apiErr);
+      }
+
+      setUser((prev) => ({
+        ...prev,
+        subscriptionStatus: "paused",
+      }));
+      setShowPauseConfirm(false);
+      toast.success("Subscription paused", {
+        description: "Billing is on hold and Pro access is suspended until you resume.",
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error(
+        friendlyError(err, "We couldn't pause your subscription. Please try again."),
+      );
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    setBillingLoading(true);
+    try {
+      const res = await fetch("/api/subscription/resume", { method: "POST" });
+      if (!res.ok) {
+        const apiErr = await readApiErrorOrLogout(
+          res,
+          "We couldn't resume your subscription. Please try again.",
+        );
+        if (apiErr === null) return;
+        throw new Error(apiErr);
+      }
+
+      const data = (await res.json()) as {
+        subscriptionStatus?: string;
+        subscriptionEnd?: string | null;
+      };
+
+      setUser((prev) => ({
+        ...prev,
+        subscriptionStatus: data.subscriptionStatus ?? "active",
+        ...(data.subscriptionEnd
+          ? { subscriptionEnd: data.subscriptionEnd }
+          : {}),
+      }));
+      toast.success("Subscription resumed", {
+        description: "Pro billing and access are active again.",
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error(
+        friendlyError(err, "We couldn't resume your subscription. Please try again."),
+      );
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     setBillingLoading(true);
     try {
@@ -2543,10 +2613,20 @@ export default function DashboardClient({
             </dt>
             <dd className="font-semibold text-ink mt-0.5">
               <span
-                className={`inline-flex items-center gap-1 ${user.subscriptionStatus === "cancelled" ? "text-warn" : ""}`}
+                className={`inline-flex items-center gap-1 ${
+                  user.subscriptionStatus === "cancelled" ||
+                  user.subscriptionStatus === "paused"
+                    ? "text-warn"
+                    : ""
+                }`}
               >
                 <span
-                  className={`inline-flex h-1.5 w-1.5 rounded-full ${user.subscriptionStatus === "cancelled" ? "bg-warn" : "bg-positive"}`}
+                  className={`inline-flex h-1.5 w-1.5 rounded-full ${
+                    user.subscriptionStatus === "cancelled" ||
+                    user.subscriptionStatus === "paused"
+                      ? "bg-warn"
+                      : "bg-positive"
+                  }`}
                 />
                 <span className="capitalize">
                   {user.subscriptionStatus || "active"}
@@ -2596,14 +2676,46 @@ export default function DashboardClient({
             .
           </p>
         )}
-        {user.subscriptionStatus === "active" && (
+        {user.subscriptionStatus === "paused" && (
+          <p className="mt-2 text-[11px] text-muted leading-snug flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 text-warn shrink-0 mt-px" />
+            Paused — billing is on hold and Pro access is suspended until you
+            resume.
+          </p>
+        )}
+        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "active" && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button
+              onClick={() => setShowPauseConfirm(true)}
+              disabled={billingLoading}
+              className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-paper hover:bg-surface border border-line-strong text-muted hover:text-ink font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Pause className="w-3 h-3" />
+              Pause subscription
+            </button>
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              disabled={billingLoading}
+              className="py-1.5 px-3.5 bg-paper hover:bg-danger-bg border border-line-strong hover:border-[#fbcfe3] text-muted hover:text-danger font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancel subscription
+            </button>
+          </div>
+        )}
+        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "paused" && (
           <button
-            onClick={() => setShowCancelConfirm(true)}
+            onClick={handleResumeSubscription}
             disabled={billingLoading}
-            className="mt-2.5 py-1.5 px-3.5 bg-paper hover:bg-danger-bg border border-line-strong hover:border-[#fbcfe3] text-muted hover:text-danger font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+            className="mt-2.5 inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-ink hover:bg-ink/90 text-paper font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
           >
-            Cancel subscription
+            <Play className="w-3 h-3" />
+            Resume subscription
           </button>
+        )}
+        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "cancelled" && (
+          <p className="mt-2 text-[10px] text-muted">
+            To subscribe again, choose a plan from the upgrade options.
+          </p>
         )}
       </div>
       <div className="border-t border-line">
@@ -3553,6 +3665,17 @@ export default function DashboardClient({
         onCancel={() => {
           if (!deleting) setPendingDelete(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={showPauseConfirm}
+        title="Pause subscription?"
+        description="Billing stops immediately and Pro access is suspended until you resume. You can resume anytime from this screen."
+        confirmLabel="Pause subscription"
+        cancelLabel="Keep active"
+        loading={billingLoading}
+        onConfirm={handlePauseSubscription}
+        onCancel={() => setShowPauseConfirm(false)}
       />
 
       <ConfirmDialog

@@ -12,6 +12,11 @@ export type ProAccessUser = {
 export function isProUser(user: ProAccessUser | null | undefined): boolean {
   if (!user) return false;
 
+  // Paused subscriptions stop billing — Pro access is suspended until resumed.
+  if (user.subscriptionStatus === 'paused') {
+    return false;
+  }
+
   // 1. Check if the subscription is active
   if (user.subscriptionStatus === 'active') {
     return true;
