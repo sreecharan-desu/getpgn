@@ -39,6 +39,9 @@ export const PLAN_SPECS: Record<
 /** How long the customer has to complete mandate authorisation at checkout. */
 export const SUBSCRIPTION_AUTH_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 
+/** Razorpay rejects start_at at exact server second — pad slightly into the future. */
+export const SUBSCRIPTION_START_AT_BUFFER_SECONDS = 60;
+
 type RazorpayPlanEntity = {
   id: string;
   period?: string;
@@ -124,14 +127,18 @@ export function buildSubscriptionCreatePayload(input: {
 }) {
   const { planId, planType, userId, userEmail, now = new Date() } = input;
   const spec = PLAN_SPECS[planType];
-  const expireBy =
-    Math.floor(now.getTime() / 1000) + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
+  const nowSec = Math.floor(now.getTime() / 1000);
+  const startAt = nowSec + SUBSCRIPTION_START_AT_BUFFER_SECONDS;
+  const expireBy = nowSec + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
 
+  // Per Razorpay Create Subscription docs: start_at + total_count + expire_by are required
+  // for end_at/charge_at to be set at creation (support flags subs with null end_at otherwise).
   return {
     plan_id: planId,
     total_count: spec.totalCount,
     quantity: 1,
     customer_notify: true as const,
+    start_at: startAt,
     expire_by: expireBy,
     notes: {
       userId,
@@ -146,8 +153,10 @@ type RazorpaySubscriptionEntity = {
   plan_id?: string;
   status?: string;
   total_count?: number | null;
+  start_at?: number | null;
   end_at?: number | null;
   expire_by?: number | null;
+  charge_at?: number | null;
   remaining_count?: number | null;
 };
 
@@ -163,6 +172,12 @@ export function assertSubscriptionBounded(
     );
   }
 
+  if (subscription.expire_by == null) {
+    throw new RazorpayPlanConfigError(
+      `Razorpay created subscription "${subscription.id}" without expire_by. Mandate authorisation window is missing — check create payload.`,
+    );
+  }
+
   if (subscription.total_count !== spec.totalCount) {
     console.warn(
       `[Razorpay] Subscription ${subscription.id} total_count=${subscription.total_count}, expected ${spec.totalCount}.`,
@@ -170,9 +185,49 @@ export function assertSubscriptionBounded(
   }
 
   if (subscription.end_at == null) {
-    console.warn(
-      `[Razorpay] Subscription ${subscription.id} has no end_at yet (status=${subscription.status}). This can be normal before authentication; Razorpay derives end_at from plan period × total_count.`,
+    throw new RazorpayPlanConfigError(
+      `Razorpay created subscription "${subscription.id}" without end_at (status=${subscription.status}). Ensure start_at and total_count are sent per Razorpay API docs.`,
     );
+  }
+
+  if (subscription.start_at == null) {
+    console.warn(
+      `[Razorpay] Subscription ${subscription.id} has no start_at in response (status=${subscription.status}).`,
+    );
+  }
+}
+
+type RazorpaySubscriptionsList = {
+  items?: RazorpaySubscriptionEntity[];
+};
+
+/** Reuse an open checkout subscription instead of creating duplicates on retry. */
+export async function findReusablePendingSubscription(
+  razorpay: Razorpay,
+  userId: string,
+  planType: BillingPlanType,
+  planId: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<RazorpaySubscriptionEntity | null> {
+  try {
+    const list = (await razorpay.subscriptions.all({ count: 100 })) as unknown as RazorpaySubscriptionsList;
+    const match = (list.items ?? []).find((sub) => {
+      const notes = (sub as { notes?: Record<string, string> }).notes;
+      return (
+        sub.status === 'created' &&
+        sub.plan_id === planId &&
+        notes?.userId === userId &&
+        notes?.planType === planType &&
+        sub.expire_by != null &&
+        sub.expire_by > nowSec &&
+        sub.end_at != null &&
+        sub.start_at != null
+      );
+    });
+    return match ?? null;
+  } catch (error) {
+    console.warn('[Razorpay] Could not list subscriptions for reuse:', error);
+    return null;
   }
 }
 

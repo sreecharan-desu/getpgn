@@ -1,4 +1,5 @@
 import { friendlyError } from '@/lib/friendlyError';
+import { mapRazorpayPaymentFailure } from '@/lib/mapRazorpayPaymentFailure';
 
 export type BillingPlan = "monthly" | "yearly";
 
@@ -140,23 +141,34 @@ export async function openRazorpayCheckout({
       ...(data.email ? { email: data.email } : {}),
     },
     theme: { color: "#0a0a0a" },
+    // Subscriptions need card e-mandate auth. UPI often fails ("something went wrong") on mobile web.
+    config: {
+      display: {
+        blocks: {
+          cards_only: {
+            name: "Pay with card",
+            instruments: [{ method: "card" }],
+          },
+        },
+        sequence: ["block.cards_only"],
+        preferences: {
+          show_default_blocks: false,
+        },
+      },
+    },
   };
 
   const rzp = new window.Razorpay!(options);
   rzp.on("payment.failed", (raw) => {
-    const response = raw as { error?: { description?: string; reason?: string } };
-    const reason = response.error?.description ?? response.error?.reason ?? "";
-    const lower = reason.toLowerCase();
-    if (
-      lower.includes("recurring") &&
-      (lower.includes("not enabled") || lower.includes("does not support"))
-    ) {
-      onError(
-        "Recurring payments aren't enabled on this account yet. Use a card that supports mandates, or contact support.",
-      );
-      return;
-    }
-    onError(friendlyError(reason, "Payment failed. Please try again or use a different card."));
+    const response = raw as {
+      error?: {
+        description?: string;
+        reason?: string;
+        source?: string;
+        step?: string;
+      };
+    };
+    onError(mapRazorpayPaymentFailure(response.error ?? {}));
   });
   rzp.open();
 }

@@ -12,6 +12,7 @@ import {
   assertSubscriptionBounded,
   buildSubscriptionCreatePayload,
   fetchAndValidatePlan,
+  findReusablePendingSubscription,
   RazorpayPlanConfigError,
   type BillingPlanType,
 } from '@/lib/razorpaySubscriptions';
@@ -48,22 +49,41 @@ export async function POST(req: NextRequest) {
 
     await fetchAndValidatePlan(razorpay, planId, planType);
 
-    const payload = buildSubscriptionCreatePayload({
-      planId,
+    const reusable = await findReusablePendingSubscription(
+      razorpay,
+      user.id,
       planType,
-      userId: user.id,
-      userEmail: user.email,
-    });
+      planId,
+    );
+
+    let subscription;
+    if (reusable?.id) {
+      console.log('[Razorpay] Reusing pending subscription:', {
+        id: reusable.id,
+        planType,
+        userId: user.id,
+        expire_by: reusable.expire_by,
+      });
+      subscription = await razorpay.subscriptions.fetch(reusable.id);
+    } else {
+      const payload = buildSubscriptionCreatePayload({
+        planId,
+        planType,
+        userId: user.id,
+        userEmail: user.email,
+      });
 
     console.log('[Razorpay] Creating subscription:', {
       planType,
       planId,
       total_count: payload.total_count,
+      start_at: payload.start_at,
       expire_by: payload.expire_by,
       userId: user.id,
     });
 
-    const subscription = await razorpay.subscriptions.create(payload);
+      subscription = await razorpay.subscriptions.create(payload);
+    }
 
     assertSubscriptionBounded(
       subscription as {
@@ -79,8 +99,10 @@ export async function POST(req: NextRequest) {
       id: subscription.id,
       status: subscription.status,
       total_count: subscription.total_count,
+      start_at: subscription.start_at,
       end_at: subscription.end_at,
       expire_by: subscription.expire_by,
+      charge_at: subscription.charge_at,
       remaining_count: subscription.remaining_count,
     });
 
