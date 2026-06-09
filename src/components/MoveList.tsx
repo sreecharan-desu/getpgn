@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  ChevronDown,
   AlertCircle,
   Info,
   Pencil,
@@ -60,6 +61,8 @@ interface MoveListProps {
   pendingEditPly?: number | null;
   onConsumePendingEdit?: () => void;
   readOnly?: boolean;
+  /** Public share page: match dashboard playback bar at the top. */
+  shareReplay?: boolean;
 }
 
 const moveColor = (status: Status) =>
@@ -86,6 +89,7 @@ export const MoveList: React.FC<MoveListProps> = ({
   pendingEditPly,
   onConsumePendingEdit,
   readOnly = false,
+  shareReplay = false,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1000);
@@ -109,10 +113,8 @@ export const MoveList: React.FC<MoveListProps> = ({
   const totalPlies = plies.length;
   const flaggedCount = plies.filter((p) => p.status === 'ambiguous' || p.status === 'illegal').length;
   const editable = !readOnly && !!onUpdateMove;
-  // Dashboard (interactive) pins the playback controls to the top; the public
-  // share page keeps a slim nav bar at the bottom (its Play/Pause lives beside
-  // the game title instead — see ShareClient).
-  const controlsPlacement: 'top' | 'share' = readOnly ? 'share' : 'top';
+  const controlsPlacement: 'top' | 'share' =
+    readOnly && !shareReplay ? 'share' : 'top';
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -307,13 +309,13 @@ export const MoveList: React.FC<MoveListProps> = ({
             onMouseLeave={() => setTip(null)}
             title={hasHints ? undefined : editable ? 'Double or right-click to edit' : ply.san && ply.san !== ply.original ? `SAN: ${ply.san}` : undefined}
             className={[
-              'flex h-full min-h-[52px] w-full cursor-pointer items-center justify-center gap-1.5 px-2 py-2 transition-colors',
+              'flex h-full min-h-[44px] w-full min-w-0 cursor-pointer items-center justify-center gap-1 px-1.5 py-2 transition-colors sm:min-h-[52px] sm:gap-1.5 sm:px-2',
               isSelected
                 ? 'bg-surface-2 ring-2 ring-inset ring-emerald-500'
                 : 'hover:bg-surface',
             ].join(' ')}
           >
-            <span className={['font-mono text-[15px] font-medium', moveColor(ply.status as Status)].join(' ')}>
+            <span className={['truncate font-mono text-[13px] font-medium sm:text-[15px]', moveColor(ply.status as Status)].join(' ')}>
               {ply.original || <span className="text-muted-2">—</span>}
             </span>
             {hasHints && <Lightbulb className="h-3.5 w-3.5 shrink-0 text-warn" />}
@@ -370,16 +372,22 @@ export const MoveList: React.FC<MoveListProps> = ({
         <div className="flex items-center justify-between text-[12px] text-muted gp-nums">
           <span>Position {currentPlyIndex} / {totalPlies}</span>
           {showPlay && (
-            <select
-              value={playSpeed}
-              onChange={(e) => setPlaySpeed(Number(e.target.value))}
-              aria-label="Playback speed"
-              className="cursor-pointer rounded-[7px] border border-line-strong bg-paper px-2 py-0.5 text-[12px] text-ink outline-none hover:border-muted-2 focus:border-ink"
-            >
-              <option value={500}>Fast · 0.5s</option>
-              <option value={1000}>Normal · 1s</option>
-              <option value={2000}>Slow · 2s</option>
-            </select>
+            <div className="relative shrink-0">
+              <select
+                value={playSpeed}
+                onChange={(e) => setPlaySpeed(Number(e.target.value))}
+                aria-label="Playback speed"
+                className="h-8 min-w-[7.25rem] cursor-pointer appearance-none rounded-lg border border-line-strong bg-paper pl-2.5 pr-8 text-[12px] font-medium text-ink outline-none transition-colors hover:border-muted-2 focus:border-ink"
+              >
+                <option value={500}>Fast · 0.5s</option>
+                <option value={1000}>Normal · 1s</option>
+                <option value={2000}>Slow · 2s</option>
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+            </div>
           )}
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-surface-2">
@@ -424,32 +432,38 @@ export const MoveList: React.FC<MoveListProps> = ({
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[14px] border border-line bg-paper text-ink">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <h3 className="shrink-0 whitespace-nowrap text-[15px] font-semibold text-ink">Move sheet</h3>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {turns.length > 0 && <span className="chip gp-nums whitespace-nowrap">{turns.length} turns</span>}
+      <div className="space-y-2 border-b border-line bg-surface px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="shrink-0 text-[15px] font-semibold text-ink">Move sheet</h3>
+          <div className="inline-flex shrink-0 rounded-lg border border-line-strong bg-paper p-0.5">
+            {(['list', 'text'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => { setEditing(null); setViewMode(m); }}
+                className={`cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium capitalize transition-all sm:px-3 sm:text-[13px] ${
+                  viewMode === m ? 'bg-ink text-paper shadow-[var(--shadow-soft)]' : 'text-muted hover:text-ink'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+        {(turns.length > 0 || flaggedCount > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {turns.length > 0 && (
+              <span className="chip gp-nums whitespace-nowrap text-[11px]">
+                {turns.length} turns
+              </span>
+            )}
             {flaggedCount > 0 && (
               <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-warn-bg px-2 py-0.5 text-[11px] font-medium text-warn">
-                <AlertCircle className="h-3 w-3" /> {flaggedCount} to fix
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                {flaggedCount} to fix
               </span>
             )}
           </div>
-        </div>
-        {/* List / Text toggle */}
-        <div className="inline-flex shrink-0 rounded-lg border border-line-strong bg-paper p-0.5">
-          {(['list', 'text'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => { setEditing(null); setViewMode(m); }}
-              className={`cursor-pointer rounded-md px-3 py-1 text-[13px] font-medium capitalize transition-all ${
-                viewMode === m ? 'bg-ink text-paper shadow-[var(--shadow-soft)]' : 'text-muted hover:text-ink'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
+        )}
       </div>
 
       {/* Playback Controls (dashboard: pinned to the top, above the move table) */}
@@ -497,16 +511,21 @@ export const MoveList: React.FC<MoveListProps> = ({
         ) : (
           /* LIST VIEW — bordered table */
           <div className="space-y-3">
-            <div className="overflow-hidden rounded-[12px] border border-line">
-              {turns.map((turn, tIdx) => (
-                <div key={turn.moveNumber} className="grid grid-cols-[56px_1fr_1fr] border-b border-line last:border-b-0">
-                  <div className="grid place-items-center border-r border-line bg-surface/60 font-mono text-[13px] text-muted-2 gp-nums">
-                    {turn.moveNumber}.
+            <div className="overflow-x-auto rounded-[12px] border border-line [-webkit-overflow-scrolling:touch]">
+              <div className="min-w-[248px]">
+                {turns.map((turn, tIdx) => (
+                  <div
+                    key={turn.moveNumber}
+                    className="grid grid-cols-[minmax(2.75rem,3rem)_minmax(0,1fr)_minmax(0,1fr)] border-b border-line last:border-b-0"
+                  >
+                    <div className="grid shrink-0 place-items-center border-r border-line bg-surface/60 px-1 font-mono text-[12px] text-muted-2 gp-nums sm:text-[13px]">
+                      {turn.moveNumber}.
+                    </div>
+                    {renderCell(plies[tIdx * 2])}
+                    {renderCell(plies[tIdx * 2 + 1])}
                   </div>
-                  {renderCell(plies[tIdx * 2])}
-                  {renderCell(plies[tIdx * 2 + 1])}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
             {editable && (
@@ -528,7 +547,7 @@ export const MoveList: React.FC<MoveListProps> = ({
       </div>
 
       {/* Playback Controls (share page: slim nav at the bottom, no Play/Pause) */}
-      {controlsPlacement === 'share' && playbackBar('share')}
+      {readOnly && !shareReplay && playbackBar('share')}
 
       {/* Hover tooltip for flagged moves */}
       {tip && (

@@ -3122,6 +3122,7 @@ export default function DashboardClient({
             )}
             <UserMenu
               username={user.username}
+              email={user.email}
               isPro={!!isPro}
               onAccount={() => setActiveTab("account")}
             />
@@ -3504,32 +3505,17 @@ export default function DashboardClient({
                         </div>
                       )}
 
-                      <div className="order-4 min-w-0 lg:col-start-1 lg:row-start-3">
-                        <div className="hidden lg:block">
-                          <ExportPanel
-                            section="pgn"
-                            pgn={pgn}
-                            gameIsValid={gameIsValid}
-                            isPaid={!!isPro}
-                            gameId={activeGameId}
-                            initialSharedSlug={activeGameSharedSlug}
-                            onSave={handleSaveGame}
-                            onShare={handleShareGame}
-                          />
-                        </div>
-                        <div className="lg:hidden">
-                          <ExportPanel
-                            section="pgn"
-                            compact
-                            pgn={pgn}
-                            gameIsValid={gameIsValid}
-                            isPaid={!!isPro}
-                            gameId={activeGameId}
-                            initialSharedSlug={activeGameSharedSlug}
-                            onSave={handleSaveGame}
-                            onShare={handleShareGame}
-                          />
-                        </div>
+                      <div className="order-4 hidden min-w-0 lg:col-start-1 lg:row-start-3 lg:block">
+                        <ExportPanel
+                          section="pgn"
+                          pgn={pgn}
+                          gameIsValid={gameIsValid}
+                          isPaid={!!isPro}
+                          gameId={activeGameId}
+                          initialSharedSlug={activeGameSharedSlug}
+                          onSave={handleSaveGame}
+                          onShare={handleShareGame}
+                        />
                       </div>
                     </div>
                   </div>

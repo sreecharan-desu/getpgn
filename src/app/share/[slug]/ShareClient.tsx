@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import Link from 'next/link';
-import { toast } from 'sonner';
 import { ChessBoard, BoardThemePicker, useBoardTheme } from '@/components/ChessBoard';
 import { MoveList, Turn } from '@/components/MoveList';
+import { ExportPanel } from '@/components/ExportPanel';
+import { MobileShareBar } from '@/components/MobileShareBar';
 import { Logo } from '@/components/ui/Logo';
 import { SoundToggle } from '@/components/ui/SoundToggle';
 import { useChessPlySounds } from '@/hooks/useChessPlySounds';
-import { Copy, Download, Link2, ArrowUpRight, Play, Pause, RotateCw } from 'lucide-react';
+import { Link2, ArrowUpRight, RotateCw, Check } from 'lucide-react';
 import { applyThemePreference, getStoredThemePreference } from '@/lib/theme';
 import {
   START_FEN,
@@ -96,11 +97,13 @@ interface ShareClientProps {
 export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareClientProps) {
   const turns: Turn[] = JSON.parse(movesJson);
   const cleanedPgn = cleanPgn(pgn, createdAt);
+  const downloadFileName = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'game'}.pgn`;
   const [currentPlyIndex, setCurrentPlyIndex] = useState<number>(0);
   useChessPlySounds(turns, currentPlyIndex, turns.length > 0);
   const [boardOrientation, setBoardOrientation] = useState<'white' | 'black'>('white');
   const [boardTheme, setBoardTheme] = useBoardTheme(true);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const boardCardRef = useRef<HTMLDivElement>(null);
+  const [boardCardHeight, setBoardCardHeight] = useState<number | null>(null);
 
   useEffect(() => {
     const syncTheme = () => {
@@ -115,26 +118,17 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
     return () => media.removeEventListener('change', onSystemThemeChange);
   }, []);
 
+  useLayoutEffect(() => {
+    const el = boardCardRef.current;
+    if (!el) return;
+    const update = () => setBoardCardHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [currentPlyIndex, boardOrientation, turns.length]);
+
   const totalPlies = turns.length * 2;
-
-  // Auto-advance the replay while playing (mirrors MoveList's ~1s cadence).
-  useEffect(() => {
-    if (!isPlaying) return;
-    if (currentPlyIndex >= totalPlies) { setIsPlaying(false); return; }
-    const id = setTimeout(() => setCurrentPlyIndex((i) => i + 1), 1000);
-    return () => clearTimeout(id);
-  }, [isPlaying, currentPlyIndex, totalPlies]);
-
-  // Any manual navigation / ply selection stops playback for consistent behavior.
-  const handleSelectPly = (index: number) => {
-    setIsPlaying(false);
-    setCurrentPlyIndex(index);
-  };
-
-  const togglePlay = () => {
-    if (!isPlaying && currentPlyIndex >= totalPlies) setCurrentPlyIndex(0);
-    setIsPlaying((p) => !p);
-  };
 
   const findKingSquare = (fen: string, color: 'w' | 'b'): string | null => {
     const boardPart = fen.split(' ')[0];
@@ -175,32 +169,15 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
 
   const getLastMove = () => getLastMoveForPly(turns, currentPlyIndex);
 
-  const copyPgn = async () => {
-    try {
-      await navigator.clipboard.writeText(cleanedPgn);
-      toast.success('PGN copied to clipboard');
-    } catch {
-      toast.error('Could not copy. Please try again.');
-    }
-  };
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      toast.success('Share link copied');
-    } catch {
-      toast.error('Could not copy the link.');
-    }
-  };
-
-  const downloadPgn = () => {
-    const blob = new Blob([cleanedPgn], { type: 'application/x-chess-pgn' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'game'}.pgn`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const getBoardStatus = () => {
+    const fen = getBoardFen();
+    const sideToMove = fen.split(' ')[1] === 'w' ? 'White' : 'Black';
+    const checkInfo = getCheckHighlight();
+    const positionLabel =
+      currentPlyIndex === 0
+        ? 'Start position'
+        : `Ply ${currentPlyIndex} of ${totalPlies}`;
+    return { sideToMove, checkInfo, positionLabel };
   };
 
   return (
@@ -218,111 +195,137 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
       </header>
 
       {/* Main */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 md:px-6">
-        {/* Title */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface px-2.5 py-0.5 text-[11px] font-medium text-muted">
-              <Link2 className="h-3 w-3" /> Public replay
-            </span>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-[24px] font-bold tracking-tight text-ink">{title}</h1>
-              <button
-                onClick={togglePlay}
-                disabled={totalPlies === 0}
-                aria-label={isPlaying ? 'Pause replay' : 'Play replay'}
-                className={`flex h-9 cursor-pointer items-center gap-2 rounded-[8px] px-4 text-[13px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
-                  isPlaying ? 'bg-ink text-paper hover:bg-ink-soft' : 'border border-line-strong bg-paper text-ink hover:bg-surface-2'
-                }`}
-              >
-                {isPlaying ? (<><Pause className="h-4 w-4 fill-current" /> Pause</>) : (<><Play className="h-4 w-4 fill-current" /> Play</>)}
-              </button>
-            </div>
-            <p className="text-[12px] leading-relaxed text-muted">
-              Shared on {formatSharedDate(createdAt)}
-            </p>
-          </div>
-          <button onClick={copyLink} className="btn-secondary btn-md w-fit">
-            <Link2 className="h-3.5 w-3.5" /> Copy link
-          </button>
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5 md:px-6 md:py-8">
+        <div className="mb-4 shrink-0 space-y-1">
+          <h1 className="truncate text-[clamp(1.125rem,4vw,1.5rem)] font-bold tracking-tight text-ink">
+            {title}
+          </h1>
+          <p className="text-[12px] text-muted">
+            Shared on {formatSharedDate(createdAt)}
+          </p>
         </div>
 
-        {/* Replay workspace — board + move sheet share one height; PGN sits below the board */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-start">
-          {/* Board column */}
-          <div className="flex flex-col gap-5">
-            <div className="card flex h-[clamp(440px,calc(100vh-160px),720px)] min-h-0 flex-col overflow-hidden p-0">
-              <div className="shrink-0 space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-[15px] font-semibold text-ink">Visual replay</h3>
-                  <button
-                    type="button"
-                    onClick={() => setBoardOrientation(boardOrientation === 'white' ? 'black' : 'white')}
-                    className="btn-secondary btn-sm shrink-0 px-2.5 sm:px-3"
-                    title="Flip board perspective"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Flip board</span>
-                  </button>
+        <div className="flex min-h-0 flex-1 flex-col gap-5 pb-2">
+          {/* Toolbar — mirrors dashboard review workspace */}
+          <div className="card flex shrink-0 items-center justify-between px-4 py-2.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface px-2.5 py-1 text-[11px] font-medium text-muted">
+              <Link2 className="h-3 w-3" /> Public replay
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#bbf7d0] bg-positive-bg px-2.5 py-1 text-[11px] font-medium text-positive">
+              <Check className="h-3 w-3" /> Validated game
+            </span>
+          </div>
+
+          <MobileShareBar
+            variant="public"
+            pgn={cleanedPgn}
+            downloadFileName={downloadFileName}
+          />
+
+          {/* panel grid — mobile: board → move sheet → PGN; lg: board+PGN | move sheet */}
+          <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]">
+            {/* Board */}
+            <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
+              <div ref={boardCardRef} className="card shrink-0 overflow-hidden p-0">
+                <div className="space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-[15px] font-semibold text-ink">Visual replay</h3>
+                    <button
+                      type="button"
+                      onClick={() => setBoardOrientation(boardOrientation === 'white' ? 'black' : 'white')}
+                      className="btn-secondary btn-sm shrink-0 px-2.5 sm:px-3"
+                      title="Flip board perspective"
+                    >
+                      <RotateCw className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Flip board</span>
+                    </button>
+                  </div>
+                  {(() => {
+                    const { sideToMove, checkInfo, positionLabel } = getBoardStatus();
+                    return (
+                      <>
+                        <p className="min-h-[18px] text-[12px] leading-snug text-muted">
+                          <span className="gp-nums">{positionLabel}</span>
+                          <span aria-hidden="true" className="text-muted-2">
+                            {' '}
+                            ·{' '}
+                          </span>
+                          <span>{sideToMove} to move</span>
+                          {checkInfo ? (
+                            <span
+                              className={`ml-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle ${
+                                checkInfo.type === 'checkmate'
+                                  ? 'border-[#fbcfe3] bg-danger-bg text-danger'
+                                  : 'border-amber-200 bg-warn-bg text-warn'
+                              }`}
+                            >
+                              {checkInfo.type === 'checkmate' ? 'Checkmate' : 'Check'}
+                            </span>
+                          ) : null}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <BoardThemePicker
+                            value={boardTheme}
+                            onChange={setBoardTheme}
+                            inline
+                            className="!justify-start"
+                          />
+                          <SoundToggle />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
-                <p className="min-h-[18px] text-[12px] text-muted gp-nums">
-                  {currentPlyIndex === 0 ? 'Start position' : `Ply ${currentPlyIndex} of ${totalPlies}`}
-                </p>
-                <div className="flex items-center gap-2">
-                  <BoardThemePicker
-                    value={boardTheme}
-                    onChange={setBoardTheme}
-                    inline
-                    className="!justify-start"
+
+                <div className="bg-surface px-3 py-3 sm:px-4 sm:py-4">
+                  <ChessBoard
+                    fen={getBoardFen()}
+                    orientation={boardOrientation}
+                    lastMove={getLastMove()}
+                    checkSquare={getCheckHighlight()?.square}
+                    checkType={getCheckHighlight()?.type}
+                    boardTheme={boardTheme}
+                    showColorPicker={false}
+                    maxWidth="100%"
                   />
-                  <SoundToggle />
                 </div>
               </div>
-              <div className="flex min-h-0 flex-1 items-center bg-surface px-2 py-3 sm:px-3">
-                <ChessBoard
-                  fen={getBoardFen()}
-                  orientation={boardOrientation}
-                  lastMove={getLastMove()}
-                  checkSquare={getCheckHighlight()?.square}
-                  checkType={getCheckHighlight()?.type}
-                  boardTheme={boardTheme}
-                  showColorPicker={false}
-                  maxWidth="100%"
+            </div>
+
+            {/* Move sheet — directly under board on mobile; right column on lg */}
+            <div className="order-2 flex min-w-0 flex-col gap-2 lg:col-start-2 lg:row-start-1 lg:row-span-3">
+              <div
+                className="flex h-[min(420px,45vh)] min-h-0 flex-col overflow-hidden lg:h-auto lg:min-h-[280px]"
+                style={
+                  boardCardHeight != null && boardCardHeight > 0
+                    ? { height: boardCardHeight }
+                    : undefined
+                }
+              >
+                <MoveList
+                  turns={turns}
+                  currentPlyIndex={currentPlyIndex}
+                  onSelectPly={setCurrentPlyIndex}
+                  readOnly
+                  shareReplay
                 />
               </div>
             </div>
 
-            <div className="card space-y-3 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-[15px] font-semibold text-ink">PGN</h3>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[#bbf7d0] bg-positive-bg px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-positive">
-                    Validated
-                  </span>
-                </div>
-                <div className="flex w-full gap-2 sm:w-auto">
-                  <button onClick={copyPgn} className="btn-secondary btn-sm flex-1 sm:flex-none">
-                    <Copy className="h-3.5 w-3.5" /> Copy PGN
-                  </button>
-                  <button onClick={downloadPgn} className="btn-primary btn-sm flex-1 sm:flex-none">
-                    <Download className="h-3.5 w-3.5" /> Download
-                  </button>
-                </div>
-              </div>
-              <pre className="max-h-40 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-[10px] border border-line bg-surface px-4 py-3 font-mono text-[12.5px] leading-relaxed text-ink/85">
-                {cleanedPgn}
-              </pre>
+            <div className="order-4 hidden min-w-0 lg:col-start-1 lg:row-start-3 lg:block">
+              <ExportPanel
+                section="pgn"
+                pgn={cleanedPgn}
+                gameIsValid
+                isPaid
+                gameId={null}
+              />
             </div>
-          </div>
-
-          {/* Move sheet — matched height with visual replay card */}
-          <div className="h-[clamp(440px,calc(100vh-160px),720px)] min-h-0 lg:sticky lg:top-20">
-            <MoveList turns={turns} currentPlyIndex={currentPlyIndex} onSelectPly={handleSelectPly} readOnly />
           </div>
         </div>
 
         {/* Conversion CTA */}
-        <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[16px] border border-line bg-surface px-6 py-6 text-center sm:flex-row sm:text-left">
+        <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-[16px] border border-line bg-surface px-6 py-6 text-center sm:mt-8 sm:flex-row sm:text-left">
           <div>
             <h3 className="text-[15px] font-semibold text-ink">Digitize your own scoresheets</h3>
             <p className="mt-0.5 text-[13px] text-muted">Turn a photo or PGN into a validated, shareable game in seconds.</p>

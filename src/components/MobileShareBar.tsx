@@ -4,12 +4,15 @@ import React, { useState } from "react";
 import { Check, Copy, Download, Link2, Lock, Save } from "lucide-react";
 import { SiLichess, SiChessdotcom } from "react-icons/si";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface MobileShareBarProps {
+  variant?: "dashboard" | "public";
   pgn: string;
-  isPaid: boolean;
-  gameId: string | null;
-  sharedSlug: string | null;
+  isPaid?: boolean;
+  gameId?: string | null;
+  sharedSlug?: string | null;
+  downloadFileName?: string;
   onSave?: (title: string) => Promise<string | null>;
   onShare?: (gameId: string) => Promise<string | null>;
 }
@@ -18,13 +21,16 @@ const actionBtnClass =
   "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-line-strong bg-paper text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40";
 
 export const MobileShareBar: React.FC<MobileShareBarProps> = ({
+  variant = "dashboard",
   pgn,
-  isPaid,
-  gameId,
-  sharedSlug,
+  isPaid = false,
+  gameId = null,
+  sharedSlug = null,
+  downloadFileName,
   onSave,
   onShare,
 }) => {
+  const isPublic = variant === "public";
   const [linkCopied, setLinkCopied] = useState(false);
   const [pgnCopied, setPgnCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -46,9 +52,12 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
     if (!onSave || !pgn) return;
 
     setSaving(true);
-    const title = `Scanned Game - ${new Date().toLocaleDateString("en-CA")}`;
-    await onSave(title);
-    setSaving(false);
+    try {
+      const title = `Scanned Game - ${new Date().toLocaleDateString("en-CA")}`;
+      await onSave(title);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCopyPgn = async () => {
@@ -69,7 +78,8 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `game_${new Date().toISOString().slice(0, 10)}.pgn`;
+    link.download =
+      downloadFileName ?? `game_${new Date().toISOString().slice(0, 10)}.pgn`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -78,6 +88,18 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
   };
 
   const handleCopyShareLink = async () => {
+    if (isPublic) {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+        toast.success("Share link copied");
+      } catch {
+        toast.error("Could not copy the link.");
+      }
+      return;
+    }
+
     if (!isPaid) {
       toast.info("Upgrade to Pro to share interactive replays.");
       return;
@@ -131,22 +153,37 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
         Share
       </span>
       <div className="flex min-w-0 items-center justify-end gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving || !pgn}
-          title={isPaid ? (gameId ? "Saved to library" : "Save game") : "Save (Pro)"}
-          className={actionBtnClass}
-        >
-          {!isPaid ? (
-            <Lock className="h-4 w-4" aria-hidden="true" />
-          ) : gameId ? (
-            <Check className="h-4 w-4 text-positive" aria-hidden="true" />
-          ) : (
-            <Save className="h-4 w-4" aria-hidden="true" />
-          )}
-          <span className="sr-only">Save game</span>
-        </button>
+        {!isPublic ? (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !pgn}
+            aria-busy={saving || undefined}
+            title={
+              saving
+                ? "Saving…"
+                : isPaid
+                  ? gameId
+                    ? "Saved to library"
+                    : "Save game"
+                  : "Save (Pro)"
+            }
+            className={actionBtnClass}
+          >
+            {saving ? (
+              <Spinner size={16} />
+            ) : !isPaid ? (
+              <Lock className="h-4 w-4" aria-hidden="true" />
+            ) : gameId ? (
+              <Check className="h-4 w-4 text-positive" aria-hidden="true" />
+            ) : (
+              <Save className="h-4 w-4" aria-hidden="true" />
+            )}
+            <span className="sr-only">
+              {saving ? "Saving game" : "Save game"}
+            </span>
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={handleCopyPgn}
@@ -176,15 +213,17 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
           onClick={handleCopyShareLink}
           disabled={sharing || !pgn}
           title={
-            isPaid
-              ? sharedSlug
-                ? "Copy public share link"
-                : "Generate and copy share link"
-              : "Share link (Pro)"
+            isPublic
+              ? "Copy share link"
+              : isPaid
+                ? sharedSlug
+                  ? "Copy public share link"
+                  : "Generate and copy share link"
+                : "Share link (Pro)"
           }
           className={actionBtnClass}
         >
-          {!isPaid ? (
+          {!isPublic && !isPaid ? (
             <Lock className="h-4 w-4" aria-hidden="true" />
           ) : linkCopied ? (
             <Check className="h-4 w-4 text-positive" aria-hidden="true" />
