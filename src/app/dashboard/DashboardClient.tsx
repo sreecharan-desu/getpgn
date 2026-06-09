@@ -98,6 +98,7 @@ import {
   getScanUsage,
 } from "@/lib/scanLimits";
 import { filterSavedGames } from "@/lib/savedGameSearch";
+import { validateChessMoves } from "@/lib/chess-validator";
 
 /** Convert pasted PGN or movetext into the raw {moveNumber, white, black} shape the validator expects. */
 function pgnToRawMoves(
@@ -288,7 +289,7 @@ export default function DashboardClient({
   const [pgn, setPgn] = useState<string>("");
   const [gameIsValid, setGameIsValid] = useState<boolean>(false);
   const [currentPlyIndex, setCurrentPlyIndex] = useState<number>(0);
-  const [boardMoveLoading, setBoardMoveLoading] = useState(false);
+  const boardMoveInFlight = useRef(false);
   useChessPlySounds(
     turns,
     currentPlyIndex,
@@ -695,15 +696,20 @@ export default function DashboardClient({
     }
   };
 
-  const applyValidationResult = (valData: {
-    moves?: Turn[];
-    pgn?: string;
-    valid?: boolean;
-  }) => {
+  const applyValidationResult = (
+    valData: {
+      moves?: Turn[];
+      pgn?: string;
+      valid?: boolean;
+    },
+    options?: { keepPlyIndex?: boolean },
+  ) => {
     setTurns(valData.moves || []);
     setPgn(valData.pgn || "");
     setGameIsValid(!!valData.valid);
-    setCurrentPlyIndex(0);
+    if (!options?.keepPlyIndex) {
+      setCurrentPlyIndex(0);
+    }
   };
 
   const bumpScanCountAfterConsume = () => {
@@ -759,52 +765,101 @@ export default function DashboardClient({
     }
   };
 
-  const runValidation = async (rawMoves: unknown[]) => {
-    try {
-      const res = await fetch("/api/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          moves: rawMoves,
-          validationToken: validationSessionToken,
-        }),
-      });
+  const runValidation = async (
+    rawMoves: unknown[],
+    options?: { keepPlyIndex?: boolean },
+  ) => {
+    const typedMoves = rawMoves as Array<{
+      moveNumber: number;
+      white: unknown;
+      black: unknown;
+    }>;
+    const snapshot = {
+      turns,
+      pgn,
+      gameIsValid,
+      currentPlyIndex,
+    };
 
-      if (!res.ok) {
-        if (await forceLogoutIfUserNotFound(res)) return;
-        const errData = await res.json().catch(() => ({}));
-        if (errData.limitExceeded) {
-          setShowPricingModal(true);
-        }
-        throw new Error(
-          friendlyError(
+    const localResult = validateChessMoves(typedMoves);
+    applyValidationResult(
+      {
+        moves: localResult.moves as Turn[],
+        pgn: localResult.pgn,
+        valid: localResult.valid,
+      },
+      options,
+    );
+
+    const syncWithServer = async (blocking: boolean) => {
+      try {
+        const res = await fetch("/api/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            moves: rawMoves,
+            validationToken: validationSessionToken,
+          }),
+        });
+
+        if (!res.ok) {
+          if (await forceLogoutIfUserNotFound(res)) return;
+          const errData = await res.json().catch(() => ({}));
+          if (errData.limitExceeded) {
+            setShowPricingModal(true);
+          }
+          applyValidationResult(
+            {
+              moves: snapshot.turns,
+              pgn: snapshot.pgn,
+              valid: snapshot.gameIsValid,
+            },
+            { keepPlyIndex: true },
+          );
+          if (options?.keepPlyIndex) {
+            setCurrentPlyIndex(snapshot.currentPlyIndex);
+          }
+          const message = friendlyError(
             errData.error,
             "We couldn't validate these moves. Please try again.",
-          ),
-        );
-      }
+          );
+          setError(message);
+          if (blocking) throw new Error(message);
+          return;
+        }
 
-      const valData = await res.json();
+        const valData = await res.json();
 
-      if (typeof valData.validationToken === "string") {
-        setValidationSessionToken(valData.validationToken);
-      }
-      if (valData.scanConsumed) {
-        bumpScanCountAfterConsume();
-      }
+        if (typeof valData.validationToken === "string") {
+          setValidationSessionToken(valData.validationToken);
+        }
+        if (valData.scanConsumed) {
+          bumpScanCountAfterConsume();
+        }
 
-      applyValidationResult(valData);
-      await persistActiveGame(valData.moves || [], valData.pgn || "");
-    } catch (err: unknown) {
-      console.error(err);
-      setError(
-        friendlyError(
-          err,
-          "We couldn't validate these moves. Please try again.",
-        ),
-      );
-      throw err;
+        applyValidationResult(valData, options);
+        void persistActiveGame(valData.moves || [], valData.pgn || "");
+      } catch (err: unknown) {
+        console.error(err);
+        if (blocking) {
+          setError(
+            friendlyError(
+              err,
+              "We couldn't validate these moves. Please try again.",
+            ),
+          );
+          throw err;
+        }
+      }
+    };
+
+    // First validation in a session must await scan reservation + token.
+    if (!validationSessionToken) {
+      await syncWithServer(true);
+      return;
     }
+
+    void syncWithServer(false);
   };
 
   const handleUpdateMove = async (
@@ -825,13 +880,7 @@ export default function DashboardClient({
       return turn;
     });
 
-    setTurns(updatedTurns);
-
-    try {
-      await runValidation(updatedTurns);
-    } catch {
-      // Handled in runValidation
-    }
+    void runValidation(updatedTurns, { keepPlyIndex: true });
   };
 
   const handleAddTurn = async () => {
@@ -858,14 +907,7 @@ export default function DashboardClient({
       },
     };
 
-    const updatedTurns = [...turns, newTurn];
-    setTurns(updatedTurns);
-
-    try {
-      await runValidation(updatedTurns);
-    } catch {
-      // Handled in runValidation
-    }
+    void runValidation([...turns, newTurn], { keepPlyIndex: true });
   };
 
   // Insert a blank ply before/after a given 1-based ply index, then re-pair & re-validate.
@@ -879,12 +921,8 @@ export default function DashboardClient({
       Math.min(position === "before" ? plyIndex - 1 : plyIndex, orig.length),
     );
     orig.splice(at, 0, "");
-    try {
-      await runValidation(originalsToRaw(orig));
-      setPendingEditPly(at + 1);
-    } catch {
-      // Handled in runValidation
-    }
+    void runValidation(originalsToRaw(orig), { keepPlyIndex: true });
+    setPendingEditPly(at + 1);
   };
 
   // Delete a single ply (1-based) and re-pair the remaining moves.
@@ -901,11 +939,7 @@ export default function DashboardClient({
       setCurrentPlyIndex(0);
       return;
     }
-    try {
-      await runValidation(originalsToRaw(orig));
-    } catch {
-      // Handled in runValidation
-    }
+    void runValidation(originalsToRaw(orig), { keepPlyIndex: true });
   };
 
   // Replace the whole move list from free-form text (Text view).
@@ -918,16 +952,12 @@ export default function DashboardClient({
       setCurrentPlyIndex(0);
       return;
     }
-    try {
-      await runValidation(raw);
-    } catch {
-      // Handled in runValidation
-    }
+    void runValidation(raw, { keepPlyIndex: true });
   };
 
   // Drag-to-update: convert a legal board drag into SAN and write it at the selected ply.
   const handleBoardMove = async (from: string, to: string) => {
-    if (boardMoveLoading) return;
+    if (boardMoveInFlight.current) return;
 
     let san: string | null = null;
     try {
@@ -944,14 +974,12 @@ export default function DashboardClient({
     while (orig.length < targetPly) orig.push("");
     orig[targetPly - 1] = san;
 
-    setBoardMoveLoading(true);
+    boardMoveInFlight.current = true;
     try {
-      await runValidation(originalsToRaw(orig));
+      void runValidation(originalsToRaw(orig), { keepPlyIndex: true });
       setCurrentPlyIndex(targetPly);
-    } catch {
-      // Handled in runValidation
     } finally {
-      setBoardMoveLoading(false);
+      boardMoveInFlight.current = false;
     }
   };
 
@@ -3187,7 +3215,7 @@ export default function DashboardClient({
                               lastMove={getLastMove()}
                               checkSquare={getCheckHighlight()?.square}
                               checkType={getCheckHighlight()?.type}
-                              interactive={!boardMoveLoading}
+                              interactive
                               onMove={handleBoardMove}
                               boardTheme={isPro ? boardTheme : "slate"}
                               showColorPicker={false}

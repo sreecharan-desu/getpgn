@@ -1,4 +1,3 @@
-import 'server-only';
 import { Chess, Move } from 'chess.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

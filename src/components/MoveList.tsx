@@ -96,6 +96,7 @@ export const MoveList: React.FC<MoveListProps> = ({
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [tip, setTip] = useState<TipState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listScrollRef = useRef<HTMLDivElement>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const plies: Ply[] = [];
@@ -123,6 +124,14 @@ export const MoveList: React.FC<MoveListProps> = ({
     }
     return () => { if (interval) clearInterval(interval); };
   }, [isPlaying, currentPlyIndex, totalPlies, playSpeed, onSelectPly]);
+
+  useEffect(() => {
+    if (!isPlaying || currentPlyIndex === 0) return;
+    const row = listScrollRef.current?.querySelector(
+      `[data-ply-index="${currentPlyIndex}"]`,
+    );
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [currentPlyIndex, isPlaying]);
 
   // Sync the text editor whenever we switch into Text mode.
   useEffect(() => {
@@ -239,6 +248,7 @@ export const MoveList: React.FC<MoveListProps> = ({
 
     return (
       <div
+        data-ply-index={ply.index}
         className="relative border-r border-line last:border-r-0"
         onContextMenu={(e) => { if (editable) { e.preventDefault(); openMenu(ply, e.clientX, e.clientY); } }}
         onTouchStart={(e) => startLongPress(ply, e)}
@@ -418,7 +428,7 @@ export const MoveList: React.FC<MoveListProps> = ({
       {controlsPlacement === 'top' && playbackBar('top')}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto p-3">
         {turns.length === 0 && viewMode === 'list' ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
             <div className="grid h-11 w-11 place-items-center rounded-full border border-line-strong bg-surface">
