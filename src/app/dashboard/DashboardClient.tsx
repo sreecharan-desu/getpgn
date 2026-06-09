@@ -170,6 +170,7 @@ interface SavedGame {
 interface User {
   id: string;
   username: string;
+  email?: string | null;
   plan: "FREE" | "PAID";
   scanCount: number;
   monthlyScanCount: number;
@@ -1082,7 +1083,10 @@ export default function DashboardClient({
     };
   };
 
-  const renderScanUsageMeter = (opts?: { compact?: boolean }) => (
+  const renderScanUsageMeter = (opts?: {
+    compact?: boolean;
+    className?: string;
+  }) => (
     <ScanUsageMeter
       used={scanUsage.used}
       limit={scanUsage.limit}
@@ -1090,6 +1094,7 @@ export default function DashboardClient({
       planLabel={scanUsage.planLabel}
       periodUnit={scanUsage.periodUnit}
       compact={opts?.compact}
+      className={opts?.className}
       onUpgrade={!isPro ? () => setShowPricingModal(true) : undefined}
     />
   );
@@ -2326,6 +2331,53 @@ export default function DashboardClient({
     }
   };
 
+  const renderAccountIdentityCard = () => (
+    <section className={`${PREMIUM_PANEL} p-4 sm:p-5 gp-fade-up shrink-0`}>
+      <div className="flex items-center gap-3 sm:gap-4">
+        <div className="relative shrink-0">
+          <UserAvatar name={user.username} size={52} />
+          {isPro ? (
+            <span
+              className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
+              title="Pro member"
+            >
+              <Sparkles className="w-2.5 h-2.5 text-ink" />
+            </span>
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-bold text-ink tracking-tight truncate">
+            {user.username}
+          </h2>
+          {user.email ? (
+            <p className="mt-0.5 text-[13px] text-muted truncate">{user.email}</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {isPro ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2 rounded-full bg-ink text-paper">
+                <Sparkles className="w-2.5 h-2.5" />
+                GetPGN Pro
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2 rounded-full bg-surface-2 border border-line-strong text-muted">
+                Free plan
+              </span>
+            )}
+            {isPro && user.subscriptionPlan ? (
+              <span className="text-[11px] text-muted capitalize">
+                {user.subscriptionPlan} billing
+              </span>
+            ) : null}
+            <span className="text-[11px] text-muted gp-nums">
+              · {scanUsage.remaining.toLocaleString()}/
+              {scanUsage.limit.toLocaleString()} scans left
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderAccountProfileSection = () => (
     <section
       className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
@@ -3304,16 +3356,35 @@ export default function DashboardClient({
                           ref={boardCardRef}
                           className="card shrink-0 overflow-hidden p-0"
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-                            <div className="min-w-0 flex-1 space-y-1">
+                          <div className="space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
+                            <div className="flex items-center justify-between gap-3">
                               <h3 className="text-[15px] font-semibold text-ink">
                                 Visual replay
                               </h3>
-                              {(() => {
-                                const { sideToMove, checkInfo, positionLabel } =
-                                  getBoardStatus();
-                                return (
-                                  <div className="flex min-h-[22px] flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setBoardOrientation(
+                                    boardOrientation === "white"
+                                      ? "black"
+                                      : "white",
+                                  )
+                                }
+                                className="btn-secondary btn-sm shrink-0 px-2.5 sm:px-3"
+                                title="Flip board perspective"
+                              >
+                                <RotateCw className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">
+                                  Flip board
+                                </span>
+                              </button>
+                            </div>
+                            {(() => {
+                              const { sideToMove, checkInfo, positionLabel } =
+                                getBoardStatus();
+                              return (
+                                <>
+                                  <p className="min-h-[18px] text-[12px] leading-snug text-muted">
                                     <span className="gp-nums">
                                       {positionLabel}
                                     </span>
@@ -3321,12 +3392,13 @@ export default function DashboardClient({
                                       aria-hidden="true"
                                       className="text-muted-2"
                                     >
-                                      ·
+                                      {" "}
+                                      ·{" "}
                                     </span>
                                     <span>{sideToMove} to move</span>
-                                    {checkInfo && (
+                                    {checkInfo ? (
                                       <span
-                                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                                        className={`ml-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle ${
                                           checkInfo.type === "checkmate"
                                             ? "border-[#fbcfe3] bg-danger-bg text-danger"
                                             : "border-amber-200 bg-warn-bg text-warn"
@@ -3336,37 +3408,27 @@ export default function DashboardClient({
                                           ? "Checkmate"
                                           : "Check"}
                                       </span>
-                                    )}
+                                    ) : null}
+                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <BoardThemePicker
+                                      value={boardTheme}
+                                      onChange={setBoardTheme}
+                                      locked={!isPro}
+                                      onLockedClick={() =>
+                                        setShowPricingModal(true)
+                                      }
+                                      inline
+                                      className="!justify-start"
+                                    />
+                                    <SoundToggle />
                                   </div>
-                                );
-                              })()}
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <BoardThemePicker
-                                value={boardTheme}
-                                onChange={setBoardTheme}
-                                locked={!isPro}
-                                onLockedClick={() => setShowPricingModal(true)}
-                                inline
-                              />
-                              <SoundToggle />
-                              <button
-                                onClick={() =>
-                                  setBoardOrientation(
-                                    boardOrientation === "white"
-                                      ? "black"
-                                      : "white",
-                                  )
-                                }
-                                className="btn-secondary btn-sm shrink-0"
-                                title="Flip board perspective"
-                              >
-                                <RotateCw className="h-3.5 w-3.5" /> Flip board
-                              </button>
-                            </div>
+                                </>
+                              );
+                            })()}
                           </div>
 
-                          <div className="bg-surface px-2 py-3 sm:px-3 sm:py-4">
+                          <div className="bg-surface px-3 py-3 sm:px-4 sm:py-4">
                             <ChessBoard
                               key={`board-${activeGameId ?? "live"}`}
                               fen={getBoardFen()}
@@ -3501,37 +3563,7 @@ export default function DashboardClient({
           {!isPro ? (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-5 min-h-0 flex-1">
               <div className="flex flex-col gap-4 min-w-0 min-h-0">
-                {/* Identity card */}
-                <section className="gp-account-hero-soft gp-fade-up shrink-0">
-                  <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
-                    <UserAvatar name={user.username} size={56} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-2">
-                        Your account
-                      </p>
-                      <h2 className="mt-0.5 text-xl font-bold text-ink tracking-tight truncate">
-                        {user.username}
-                      </h2>
-                      <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2.5 rounded-full bg-surface-2 border border-line-strong text-muted">
-                          Free plan
-                        </span>
-                        <span className="text-[11px] text-muted gp-nums">
-                          {scanUsage.used}/{scanUsage.limit} scans used
-                        </span>
-                      </div>
-                    </div>
-                    <div className="sm:text-right shrink-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-2">
-                        Remaining
-                      </p>
-                      <p className="mt-0.5 text-2xl font-bold tracking-tight text-ink gp-nums">
-                        {scanUsage.remaining}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-muted">free scans</p>
-                    </div>
-                  </div>
-                </section>
+                {renderAccountIdentityCard()}
 
                 {renderAccountProfileSection()}
 
@@ -3579,17 +3611,17 @@ export default function DashboardClient({
 
               <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start shrink-0">
                 {renderScanUsageMeter({ compact: true })}
-                <section className="relative overflow-hidden rounded-[28px] bg-ink p-5 text-paper shadow-[var(--shadow-pop)] gp-fade-up">
-                  <div className="relative space-y-2.5">
-                    <h2 className="font-extrabold text-[15px] tracking-tight">
+                <section className={`${PREMIUM_PANEL} p-4 gp-fade-up`}>
+                  <div className="space-y-2.5">
+                    <h2 className="font-semibold text-[14px] tracking-tight text-ink">
                       Unlock Pro
                     </h2>
-                    <p className="text-[11px] text-paper/70 leading-relaxed">
+                    <p className="text-[11px] text-muted leading-relaxed">
                       ₹100/mo · 100 scans or ₹1,000/yr · 1,000 scans, plus saved library and shareable replays.
                     </p>
                     <button
                       onClick={() => setShowPricingModal(true)}
-                      className="w-full py-2 px-4 bg-paper hover:bg-surface text-ink font-bold rounded-xl text-[12px] transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-2 px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-xl text-[12px] transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       View plans
                       <ArrowUpRight className="w-3.5 h-3.5" />
@@ -3604,98 +3636,7 @@ export default function DashboardClient({
             </div>
           ) : (
             <div className="flex flex-col gap-4 min-h-0 flex-1">
-              {/* Pro identity hero */}
-              <section className="gp-account-hero gp-fade-up shrink-0">
-                <span className="gp-account-hero__glow" aria-hidden />
-                <div className="relative p-5 sm:p-6 md:p-7">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
-                    <div className="relative shrink-0">
-                      <div className="rounded-full ring-2 ring-paper/15 ring-offset-2 ring-offset-transparent">
-                        <UserAvatar name={user.username} size={68} />
-                      </div>
-                      <span
-                        className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-7 h-7 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
-                        title="Pro member"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-ink" />
-                      </span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paper/45">
-                        Pro member
-                      </p>
-                      <h2 className="mt-0.5 text-xl sm:text-[1.65rem] font-bold tracking-[-0.02em] truncate">
-                        {user.username}
-                      </h2>
-                      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2.5 rounded-full bg-paper text-ink">
-                          <Sparkles className="w-2.5 h-2.5" />
-                          GetPGN Pro
-                        </span>
-                        {user.subscriptionPlan && (
-                          <span className="text-[11px] text-paper/55 capitalize">
-                            {user.subscriptionPlan} billing
-                          </span>
-                        )}
-                        {user.subscriptionEnd && (
-                          <span className="text-[11px] text-paper/40 gp-nums">
-                            ·{" "}
-                            {user.subscriptionStatus === "cancelled"
-                              ? "Access until"
-                              : "Renews"}{" "}
-                            {new Date(user.subscriptionEnd).toLocaleDateString(
-                              "en-US",
-                              { dateStyle: "medium" },
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="sm:text-right shrink-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-paper/40">
-                        Scans remaining
-                      </p>
-                      <p className="mt-0.5 text-[2rem] font-bold leading-none tracking-tight gp-nums">
-                        {scanUsage.remaining.toLocaleString()}
-                      </p>
-                      <p className="mt-1 text-[11px] text-paper/50 gp-nums">
-                        of {scanUsage.limit.toLocaleString()} this{" "}
-                        {scanUsage.periodUnit === "year" ? "year" : "month"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-6 pt-5 border-t border-paper/10">
-                    <div className="flex items-center justify-between gap-3 text-[11px] text-paper/45 mb-2.5">
-                      <span className="font-medium uppercase tracking-[0.1em]">
-                        Scan allowance
-                      </span>
-                      <span className="gp-nums font-semibold text-paper/70">
-                        {scanUsage.used.toLocaleString()}/
-                        {scanUsage.limit.toLocaleString()} used
-                      </span>
-                    </div>
-                    <div
-                      className="h-1.5 overflow-hidden rounded-full bg-paper/10"
-                      role="progressbar"
-                      aria-valuenow={scanUsage.used}
-                      aria-valuemin={0}
-                      aria-valuemax={scanUsage.limit}
-                    >
-                      <div
-                        className="h-full rounded-full bg-paper/85 transition-all duration-500"
-                        style={{
-                          width: `${Math.min(100, scanUsage.limit > 0 ? (scanUsage.used / scanUsage.limit) * 100 : 0)}%`,
-                        }}
-                      />
-                    </div>
-                    <p className="mt-2 text-[11px] text-paper/40">
-                      {scanUsage.periodUnit === "year"
-                        ? "Yearly allowance resets every January 1."
-                        : "Monthly allowance resets on the 1st of each month."}
-                    </p>
-                  </div>
-                </div>
-              </section>
+              {renderAccountIdentityCard()}
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-5 min-h-0 lg:items-start">
                 <div className="flex flex-col gap-4 min-w-0">

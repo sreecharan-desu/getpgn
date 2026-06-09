@@ -937,7 +937,7 @@ h1, h2, h3, h4 {
   box-shadow:
     var(--shadow-pop),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  padding: 14px 10px 10px 14px;
+  padding: 12px 14px 14px 12px;
   width: 100%;
 }
 

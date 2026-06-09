@@ -59,6 +59,7 @@ export default async function DashboardPage() {
   const sanitizedUser = {
     id: user.id,
     username: user.username,
+    email: user.email,
     plan: user.plan,
     scanCount: user.scanCount,
     monthlyScanCount: user.monthlyScanCount,

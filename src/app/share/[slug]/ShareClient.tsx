@@ -252,22 +252,30 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
           {/* Board column */}
           <div className="flex flex-col gap-5">
             <div className="card flex h-[clamp(440px,calc(100vh-160px),720px)] min-h-0 flex-col overflow-hidden p-0">
-              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-                <div className="min-w-0 space-y-1">
+              <div className="shrink-0 space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
+                <div className="flex items-center justify-between gap-3">
                   <h3 className="text-[15px] font-semibold text-ink">Visual replay</h3>
-                  <p className="min-h-[18px] text-[12px] text-muted gp-nums">
-                    {currentPlyIndex === 0 ? 'Start position' : `Ply ${currentPlyIndex} of ${totalPlies}`}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <BoardThemePicker value={boardTheme} onChange={setBoardTheme} inline />
-                  <SoundToggle />
                   <button
+                    type="button"
                     onClick={() => setBoardOrientation(boardOrientation === 'white' ? 'black' : 'white')}
-                    className="btn-secondary btn-sm shrink-0"
+                    className="btn-secondary btn-sm shrink-0 px-2.5 sm:px-3"
+                    title="Flip board perspective"
                   >
-                    <RotateCw className="h-3.5 w-3.5" /> Flip board
+                    <RotateCw className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Flip board</span>
                   </button>
+                </div>
+                <p className="min-h-[18px] text-[12px] text-muted gp-nums">
+                  {currentPlyIndex === 0 ? 'Start position' : `Ply ${currentPlyIndex} of ${totalPlies}`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <BoardThemePicker
+                    value={boardTheme}
+                    onChange={setBoardTheme}
+                    inline
+                    className="!justify-start"
+                  />
+                  <SoundToggle />
                 </div>
               </div>
               <div className="flex min-h-0 flex-1 items-center bg-surface px-2 py-3 sm:px-3">
