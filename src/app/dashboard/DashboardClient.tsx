@@ -1732,7 +1732,7 @@ export default function DashboardClient({
 
   const renderUploadGreeting = (opts?: { centered?: boolean }) => (
     <p
-      className={`text-[14px] font-medium tracking-tight text-muted gp-fade-up ${
+      className={`text-[clamp(1.25rem,2.8vw,1.625rem)] font-semibold tracking-tight text-ink gp-fade-up ${
         opts?.centered ? "text-center" : ""
       }`}
     >
