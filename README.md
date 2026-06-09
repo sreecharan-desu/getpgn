@@ -68,6 +68,7 @@ Powered by Next.js 15, Prisma, python-chess validation, and advanced Gemini Mult
    - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Matching Test or Live keys from Razorpay.
    - `RAZORPAY_MONTHLY_PLAN_ID` / `RAZORPAY_YEARLY_PLAN_ID`: Subscription plan IDs.
    - `RAZORPAY_WEBHOOK_SECRET`: Webhook signing secret for subscription events.
+   - Razorpay webhook URL (production): `https://getpgn.com/api/webhooks/razorpay`
 
 5. Initialize Database:
    ```bash
