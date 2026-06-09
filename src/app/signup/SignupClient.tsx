@@ -18,6 +18,8 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const busy = loading || redirecting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +53,7 @@ export default function SignupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, email, password }),
+        keepalive: true,
       });
 
       if (!res.ok) {
@@ -61,6 +64,7 @@ export default function SignupPage() {
 
       const data = (await res.json()) as { email?: string };
       const verifiedEmail = data.email ?? email.trim().toLowerCase();
+      setRedirecting(true);
       router.replace(
         `/verify-email?email=${encodeURIComponent(verifiedEmail)}`,
       );
@@ -69,7 +73,6 @@ export default function SignupPage() {
       setError(
         friendlyError(err, "We couldn't create your account. Please try again."),
       );
-    } finally {
       setLoading(false);
     }
   };
@@ -91,7 +94,13 @@ export default function SignupPage() {
     >
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         {error && <Feedback variant="error">{error}</Feedback>}
+        {redirecting && (
+          <Feedback variant="success">
+            Account created. Taking you to email verification…
+          </Feedback>
+        )}
 
+        <fieldset disabled={busy} className="space-y-4 border-0 p-0 m-0 min-w-0">
         <IconInput
           id="username"
           label="Username"
@@ -101,7 +110,7 @@ export default function SignupPage() {
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          disabled={loading}
+          disabled={busy}
           placeholder="your-username"
         />
 
@@ -114,7 +123,7 @@ export default function SignupPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
+          disabled={busy}
           placeholder="you@example.com"
         />
 
@@ -127,7 +136,7 @@ export default function SignupPage() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
+          disabled={busy}
           placeholder="At least 8 characters"
         />
 
@@ -140,17 +149,21 @@ export default function SignupPage() {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          disabled={loading}
+          disabled={busy}
           placeholder="Re-enter your password"
         />
 
         <button
           type="submit"
-          disabled={loading}
-          aria-busy={loading || undefined}
+          disabled={busy}
+          aria-busy={busy || undefined}
           className="btn-primary btn-md w-full"
         >
-          {loading ? (
+          {redirecting ? (
+            <>
+              <Spinner size={15} /> Opening verification…
+            </>
+          ) : loading ? (
             <>
               <Spinner size={15} /> Creating account…
             </>
@@ -158,6 +171,7 @@ export default function SignupPage() {
             "Create account"
           )}
         </button>
+        </fieldset>
       </form>
     </AuthSplitLayout>
   );

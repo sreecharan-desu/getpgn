@@ -361,7 +361,12 @@ export default function VerifyEmailClient({
       subtitle="One quick step before you can start digitizing scoresheets."
     >
       <Suspense
-        fallback={<div className="py-4 text-center text-[13px] text-muted">Loading…</div>}
+        fallback={
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <Spinner size={24} />
+            <p className="text-[13px] text-muted">Loading…</p>
+          </div>
+        }
       >
         <VerifyEmailContent
           initialEmail={initialEmail}

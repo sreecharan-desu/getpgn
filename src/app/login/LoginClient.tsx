@@ -16,7 +16,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const busy = loading || redirecting || success;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +50,7 @@ export default function LoginPage() {
       };
 
       if (data.needsVerification) {
+        setRedirecting(true);
         router.replace(
           `/verify-email?email=${encodeURIComponent(data.email ?? "")}`,
         );
@@ -56,11 +59,11 @@ export default function LoginPage() {
       }
 
       setSuccess(true);
+      setRedirecting(true);
       router.replace('/dashboard');
       router.refresh();
     } catch (err: unknown) {
       setError(friendlyError(err, "We couldn't sign you in. Please try again."));
-    } finally {
       setLoading(false);
     }
   };
@@ -85,6 +88,9 @@ export default function LoginPage() {
         {success && (
           <Feedback variant="success">Signed in successfully. Redirecting…</Feedback>
         )}
+        {redirecting && !success && (
+          <Feedback variant="success">Taking you to email verification…</Feedback>
+        )}
 
         <IconInput
           id="username"
@@ -95,7 +101,7 @@ export default function LoginPage() {
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          disabled={loading || success}
+          disabled={busy}
           placeholder="your-username"
         />
 
@@ -120,18 +126,22 @@ export default function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={loading || success}
+            disabled={busy}
             placeholder="••••••••"
           />
         </div>
 
         <button
           type="submit"
-          disabled={loading || success}
-          aria-busy={loading || undefined}
+          disabled={busy}
+          aria-busy={busy || undefined}
           className="btn-primary btn-md w-full"
         >
-          {loading ? (
+          {redirecting ? (
+            <>
+              <Spinner size={15} /> Redirecting…
+            </>
+          ) : loading ? (
             <>
               <Spinner size={15} /> Signing in…
             </>
