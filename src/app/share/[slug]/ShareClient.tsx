@@ -10,8 +10,12 @@ import { SoundToggle } from '@/components/ui/SoundToggle';
 import { useChessPlySounds } from '@/hooks/useChessPlySounds';
 import { Copy, Download, Link2, ArrowUpRight, Play, Pause, RotateCw } from 'lucide-react';
 import { applyThemePreference, getStoredThemePreference } from '@/lib/theme';
-
-const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+import {
+  START_FEN,
+  getBoardFenForPly,
+  getLastMoveForPly,
+  getCheckPlyForDisplay,
+} from '@/lib/board-position';
 
 // Older saved games may contain a duplicate header block and/or ugly all-`?`
 // placeholder tags. Keep only the first contiguous run of [...] tag lines as
@@ -154,32 +158,14 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
     return null;
   };
 
-  const getBoardFen = () => {
-    if (currentPlyIndex === 0) return START_FEN;
-    const plies: (string | null)[] = [];
-    turns.forEach((turn) => {
-      plies.push(turn.white.fen);
-      plies.push(turn.black.fen);
-    });
-    const targetFen = plies[currentPlyIndex - 1];
-    if (targetFen) return targetFen;
-    for (let i = currentPlyIndex - 2; i >= 0; i--) {
-      if (plies[i]) return plies[i]!;
-    }
-    return START_FEN;
-  };
+  const getBoardFen = () => getBoardFenForPly(turns, currentPlyIndex, START_FEN);
 
   const getCheckHighlight = () => {
-    if (currentPlyIndex === 0 || turns.length === 0) return null;
-    const lastPlyIdx = currentPlyIndex - 1;
-    const turnIdx = Math.floor(lastPlyIdx / 2);
-    const player = lastPlyIdx % 2 === 0 ? 'white' : 'black';
-    const turn = turns[turnIdx];
-    if (!turn) return null;
-    const ply = turn[player];
-    if (!ply || !ply.san) return null;
-    const isCheckmate = ply.san.endsWith('#');
-    const isCheck = ply.san.endsWith('+');
+    const checkPly = getCheckPlyForDisplay(turns, currentPlyIndex);
+    if (!checkPly) return null;
+    const { ply, player } = checkPly;
+    const isCheckmate = ply.san!.endsWith('#');
+    const isCheck = ply.san!.endsWith('+');
     if (isCheckmate || isCheck) {
       const kingSq = findKingSquare(getBoardFen(), player === 'white' ? 'b' : 'w');
       if (kingSq) return { square: kingSq, type: isCheckmate ? ('checkmate' as const) : ('check' as const) };
@@ -187,32 +173,12 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
     return null;
   };
 
-  const getLastMove = (): [string, string] | null => {
-    if (currentPlyIndex === 0 || turns.length === 0) return null;
-    const lastPlyIdx = currentPlyIndex - 1;
-    const turnIdx = Math.floor(lastPlyIdx / 2);
-    const player = lastPlyIdx % 2 === 0 ? 'white' : 'black';
-    const turn = turns[turnIdx];
-    if (!turn) return null;
-    const ply = turn[player];
-    if (!ply || !ply.uci) return null;
-    if (ply.uci.length >= 4) return [ply.uci.slice(0, 2), ply.uci.slice(2, 4)];
-    return null;
-  };
+  const getLastMove = () => getLastMoveForPly(turns, currentPlyIndex);
 
   const copyPgn = async () => {
     try {
       await navigator.clipboard.writeText(cleanedPgn);
       toast.success('PGN copied to clipboard');
-    } catch {
-      toast.error('Could not copy. Please try again.');
-    }
-  };
-
-  const copyFen = async () => {
-    try {
-      await navigator.clipboard.writeText(getBoardFen());
-      toast.success('FEN copied to clipboard');
     } catch {
       toast.error('Could not copy. Please try again.');
     }
@@ -315,19 +281,6 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
                   showColorPicker={false}
                   maxWidth="100%"
                 />
-              </div>
-              <div className="shrink-0 border-t border-line px-5 py-3">
-                <div className="flex items-center gap-2 overflow-hidden rounded-[10px] border border-line bg-paper px-3 py-2">
-                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-2">FEN</span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] leading-relaxed text-ink/80">{getBoardFen()}</span>
-                  <button
-                    onClick={copyFen}
-                    className="flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-                    title="Copy FEN"
-                  >
-                    <Copy className="h-3 w-3" /> Copy
-                  </button>
-                </div>
               </div>
             </div>
 

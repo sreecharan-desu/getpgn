@@ -13,6 +13,8 @@ interface ExportPanelProps {
   section?: 'all' | 'pgn' | 'share';
   /** Stretch PGN card + textarea to fill a flex parent (review workspace). */
   fillHeight?: boolean;
+  /** Compact layout for mobile review workspace. */
+  compact?: boolean;
 }
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({
@@ -25,6 +27,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   onShare,
   section = 'all',
   fillHeight = false,
+  compact = false,
 }) => {
   const [copied, setCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -131,7 +134,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
 
   return (
     <div
-      className={`card p-5 text-ink ${
+      className={`card text-ink ${compact ? 'p-3.5' : 'p-5'} ${
         fillHeight && section === 'pgn' ? 'flex h-full min-h-0 flex-col' : ''
       }`}
     >
@@ -150,8 +153,8 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-                <FileText className="h-4 w-4 text-muted-2" />
+              <h3 className={`flex items-center gap-2 font-semibold text-ink ${compact ? 'text-[13px]' : 'text-[15px]'}`}>
+                <FileText className={compact ? 'h-3.5 w-3.5 text-muted-2' : 'h-4 w-4 text-muted-2'} />
                 <span>PGN output</span>
               </h3>
               {gameIsValid ? (
@@ -164,12 +167,20 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                 </span>
               )}
             </div>
-            <div className="flex w-full gap-2 sm:w-auto">
-              <button onClick={handleCopy} disabled={!pgn} className="btn-secondary btn-sm flex-1 sm:flex-none">
-                {copied ? (<><Check className="h-3.5 w-3.5" /> Copied</>) : (<><Copy className="h-3.5 w-3.5" /> Copy PGN</>)}
+            <div className={`flex w-full gap-2 ${compact ? '' : 'sm:w-auto'}`}>
+              <button
+                onClick={handleCopy}
+                disabled={!pgn}
+                className={`btn-secondary flex-1 ${compact ? 'btn-sm px-2.5 text-[12px]' : 'btn-sm sm:flex-none'}`}
+              >
+                {copied ? (<><Check className="h-3 w-3" /> Copied</>) : (<><Copy className="h-3 w-3" /> Copy PGN</>)}
               </button>
-              <button onClick={handleDownload} disabled={!pgn} className="btn-primary btn-sm flex-1 sm:flex-none">
-                <Download className="h-3.5 w-3.5" /> Download
+              <button
+                onClick={handleDownload}
+                disabled={!pgn}
+                className={`btn-primary flex-1 ${compact ? 'btn-sm px-2.5 text-[12px]' : 'btn-sm sm:flex-none'}`}
+              >
+                <Download className="h-3 w-3" /> Download
               </button>
             </div>
           </div>
@@ -177,10 +188,12 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
           <textarea
             readOnly
             value={displayPgn}
-            className={`w-full resize-none rounded-[10px] border border-line bg-surface p-3.5 font-mono text-[12.5px] leading-relaxed text-ink outline-none transition-colors placeholder:text-muted-2 focus:border-ink ${
-              fillHeight && section === 'pgn'
-                ? 'min-h-[8rem] flex-1'
-                : 'h-24'
+            className={`w-full resize-none rounded-[10px] border border-line bg-surface font-mono leading-relaxed text-ink outline-none transition-colors placeholder:text-muted-2 focus:border-ink ${
+              compact
+                ? 'h-16 p-2.5 text-[11.5px]'
+                : fillHeight && section === 'pgn'
+                  ? 'min-h-[8rem] flex-1 p-3.5 text-[12.5px]'
+                  : 'h-24 p-3.5 text-[12.5px]'
             }`}
           />
         </div>

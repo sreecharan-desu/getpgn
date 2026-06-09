@@ -12,6 +12,13 @@ import {
 } from "@/components/ChessBoard";
 import { MoveList, Turn } from "@/components/MoveList";
 import { ExportPanel } from "@/components/ExportPanel";
+import { MobileShareBar } from "@/components/MobileShareBar";
+import {
+  START_FEN,
+  getBoardFenForPly,
+  getLastMoveForPly,
+  getCheckPlyForDisplay,
+} from "@/lib/board-position";
 import { Logo } from "@/components/ui/Logo";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FeedbackModal } from "@/components/ui/FeedbackModal";
@@ -90,8 +97,6 @@ import {
   getScanUsage,
 } from "@/lib/scanLimits";
 import { filterSavedGames } from "@/lib/savedGameSearch";
-
-const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 /** Convert pasted PGN or movetext into the raw {moveNumber, white, black} shape the validator expects. */
 function pgnToRawMoves(
@@ -315,7 +320,6 @@ export default function DashboardClient({
     "white",
   );
   const [boardTheme, setBoardTheme] = useBoardTheme(!!isPro);
-  const [fenCopied, setFenCopied] = useState<boolean>(false);
 
   useEffect(() => {
     void fetch("/api/auth/user").then(async (res) => {
@@ -970,26 +974,22 @@ export default function DashboardClient({
     return null;
   };
 
+  const getBoardFen = () =>
+    getBoardFenForPly(turns, currentPlyIndex, START_FEN);
+
+  const getLastMove = () => getLastMoveForPly(turns, currentPlyIndex);
+
   const getCheckHighlight = () => {
-    if (currentPlyIndex === 0 || turns.length === 0) return null;
+    const checkPly = getCheckPlyForDisplay(turns, currentPlyIndex);
+    if (!checkPly) return null;
 
-    const lastPlyIdx = currentPlyIndex - 1;
-    const turnIdx = Math.floor(lastPlyIdx / 2);
-    const player = lastPlyIdx % 2 === 0 ? "white" : "black";
-
-    const turn = turns[turnIdx];
-    if (!turn) return null;
-
-    const ply = turn[player];
-    if (!ply || !ply.san) return null;
-
-    const isCheckmate = ply.san.endsWith("#");
-    const isCheck = ply.san.endsWith("+");
+    const { ply, player } = checkPly;
+    const isCheckmate = ply.san!.endsWith("#");
+    const isCheck = ply.san!.endsWith("+");
 
     if (isCheckmate || isCheck) {
       const checkedColor = player === "white" ? "b" : "w";
-      const currentFen = getBoardFen();
-      const kingSq = findKingSquare(currentFen, checkedColor);
+      const kingSq = findKingSquare(getBoardFen(), checkedColor);
       if (kingSq) {
         return {
           square: kingSq,
@@ -999,54 +999,6 @@ export default function DashboardClient({
     }
 
     return null;
-  };
-
-  const getLastMove = (): [string, string] | null => {
-    if (currentPlyIndex === 0 || turns.length === 0) return null;
-
-    const lastPlyIdx = currentPlyIndex - 1;
-    const turnIdx = Math.floor(lastPlyIdx / 2);
-    const player = lastPlyIdx % 2 === 0 ? "white" : "black";
-
-    const turn = turns[turnIdx];
-    if (!turn) return null;
-
-    const ply = turn[player];
-    if (!ply || !ply.uci) return null;
-
-    if (ply.uci.length >= 4) {
-      return [ply.uci.slice(0, 2), ply.uci.slice(2, 4)];
-    }
-    return null;
-  };
-
-  const getBoardFen = () => {
-    if (currentPlyIndex === 0) return START_FEN;
-
-    const plies: (string | null)[] = [];
-    turns.forEach((turn) => {
-      plies.push(turn.white.fen);
-      plies.push(turn.black.fen);
-    });
-
-    const targetFen = plies[currentPlyIndex - 1];
-    if (targetFen) return targetFen;
-
-    for (let i = currentPlyIndex - 2; i >= 0; i--) {
-      if (plies[i]) return plies[i]!;
-    }
-
-    return START_FEN;
-  };
-
-  const handleCopyFen = async () => {
-    try {
-      await navigator.clipboard.writeText(getBoardFen());
-      setFenCopied(true);
-      setTimeout(() => setFenCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy FEN: ", err);
-    }
   };
 
   const getTotalPlies = () =>
@@ -3142,10 +3094,18 @@ export default function DashboardClient({
                       </div>
                     </div>
 
-                    {/* panel grid — board (natural size) + move sheet (matched height, scrolls) */}
+                    <MobileShareBar
+                      pgn={pgn}
+                      isPaid={!!isPro}
+                      gameId={activeGameId}
+                      sharedSlug={activeGameSharedSlug}
+                      onShare={handleShareGame}
+                    />
+
+                    {/* panel grid — mobile: board → move sheet → PGN; lg: board+PGN | move sheet */}
                     <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]">
-                      {/* Left — board, then PGN */}
-                      <div className="flex min-w-0 flex-col gap-4">
+                      {/* Board */}
+                      <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
                         <div
                           ref={boardCardRef}
                           className="card shrink-0 overflow-hidden p-0"
@@ -3230,85 +3190,13 @@ export default function DashboardClient({
                               Drag pieces to update notation
                             </p> */}
                           </div>
-
-                          <div className="border-t border-line px-5 py-3">
-                            <div className="flex items-center gap-2 overflow-hidden rounded-[10px] border border-line bg-paper px-3 py-2">
-                              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-2">
-                                FEN
-                              </span>
-                              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] leading-relaxed text-ink/80">
-                                {getBoardFen()}
-                              </span>
-                              <button
-                                onClick={handleCopyFen}
-                                className="flex shrink-0 items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-                                title="Copy FEN"
-                              >
-                                {fenCopied ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-positive" />{" "}
-                                    Copied
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-3 w-3" /> Copy
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {!gameIsValid && (
-                          <div className="flex shrink-0 items-start gap-3 rounded-[14px] border border-amber-200 bg-warn-bg px-4 py-3 text-[12.5px]">
-                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-                            <div className="space-y-1">
-                              <span className="block font-semibold text-ink">
-                                Almost there
-                              </span>
-                              <span className="block leading-relaxed text-muted">
-                                Fix the flagged moves (shown in{" "}
-                                <span className="font-medium text-warn">
-                                  amber
-                                </span>
-                                ). Tip: right-click any move for instant
-                                suggestions — fixing the first one often clears
-                                the rest.
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        <ExportPanel
-                          section="pgn"
-                          pgn={pgn}
-                          gameIsValid={gameIsValid}
-                          isPaid={!!isPro}
-                          gameId={activeGameId}
-                          initialSharedSlug={activeGameSharedSlug}
-                          onSave={handleSaveGame}
-                          onShare={handleShareGame}
-                        />
-
-                        {/* Share panel — mobile only; on md+ it lives in the sidebar */}
-                        <div className="md:hidden">
-                          <ExportPanel
-                            section="share"
-                            pgn={pgn}
-                            gameIsValid={gameIsValid}
-                            isPaid={!!isPro}
-                            gameId={activeGameId}
-                            initialSharedSlug={activeGameSharedSlug}
-                            onSave={handleSaveGame}
-                            onShare={handleShareGame}
-                          />
                         </div>
                       </div>
 
-                      {/* Right — move sheet matched to board height, feedback below */}
-                      <div className="flex min-w-0 flex-col gap-2">
+                      {/* Move sheet — directly under board on mobile; right column on lg */}
+                      <div className="order-2 flex min-w-0 flex-col gap-2 lg:col-start-2 lg:row-start-1 lg:row-span-3">
                         <div
-                          className="flex min-h-0 flex-col overflow-hidden"
+                          className="flex min-h-0 flex-col overflow-hidden lg:min-h-[280px]"
                           style={
                             boardCardHeight != null && boardCardHeight > 0
                               ? { height: boardCardHeight }
@@ -3340,6 +3228,52 @@ export default function DashboardClient({
                             Send feedback
                           </button>
                         )}
+                      </div>
+
+                      {!gameIsValid && (
+                        <div className="order-3 flex shrink-0 items-start gap-3 rounded-[14px] border border-amber-200 bg-warn-bg px-4 py-3 text-[12.5px] lg:col-start-1 lg:row-start-2">
+                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+                          <div className="space-y-1">
+                            <span className="block font-semibold text-ink">
+                              Almost there
+                            </span>
+                            <span className="block leading-relaxed text-muted">
+                              Fix the flagged moves (shown in{" "}
+                              <span className="font-medium text-warn">amber</span>
+                              ). Tip: right-click any move for instant
+                              suggestions — fixing the first one often clears
+                              the rest.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="order-4 min-w-0 lg:col-start-1 lg:row-start-3">
+                        <div className="hidden lg:block">
+                          <ExportPanel
+                            section="pgn"
+                            pgn={pgn}
+                            gameIsValid={gameIsValid}
+                            isPaid={!!isPro}
+                            gameId={activeGameId}
+                            initialSharedSlug={activeGameSharedSlug}
+                            onSave={handleSaveGame}
+                            onShare={handleShareGame}
+                          />
+                        </div>
+                        <div className="lg:hidden">
+                          <ExportPanel
+                            section="pgn"
+                            compact
+                            pgn={pgn}
+                            gameIsValid={gameIsValid}
+                            isPaid={!!isPro}
+                            gameId={activeGameId}
+                            initialSharedSlug={activeGameSharedSlug}
+                            onSave={handleSaveGame}
+                            onShare={handleShareGame}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
