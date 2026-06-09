@@ -18,6 +18,7 @@ import {
   getBoardFenForPly,
   getLastMoveForPly,
   getCheckPlyForDisplay,
+  getBoardEditPlyIndex,
 } from "@/lib/board-position";
 import { Logo } from "@/components/ui/Logo";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -287,6 +288,7 @@ export default function DashboardClient({
   const [pgn, setPgn] = useState<string>("");
   const [gameIsValid, setGameIsValid] = useState<boolean>(false);
   const [currentPlyIndex, setCurrentPlyIndex] = useState<number>(0);
+  const [boardMoveLoading, setBoardMoveLoading] = useState(false);
   useChessPlySounds(
     turns,
     currentPlyIndex,
@@ -923,8 +925,10 @@ export default function DashboardClient({
     }
   };
 
-  // Drag-to-update: convert a legal board drag into SAN and write it at the next ply.
+  // Drag-to-update: convert a legal board drag into SAN and write it at the selected ply.
   const handleBoardMove = async (from: string, to: string) => {
+    if (boardMoveLoading) return;
+
     let san: string | null = null;
     try {
       const c = new Chess(getBoardFen());
@@ -935,16 +939,19 @@ export default function DashboardClient({
     }
     if (!san) return;
 
-    const targetPly = currentPlyIndex + 1;
+    const targetPly = getBoardEditPlyIndex(turns, currentPlyIndex);
     const orig = turnsToOriginals(turns);
     while (orig.length < targetPly) orig.push("");
     orig[targetPly - 1] = san;
 
+    setBoardMoveLoading(true);
     try {
       await runValidation(originalsToRaw(orig));
       setCurrentPlyIndex(targetPly);
     } catch {
       // Handled in runValidation
+    } finally {
+      setBoardMoveLoading(false);
     }
   };
 
@@ -3180,7 +3187,7 @@ export default function DashboardClient({
                               lastMove={getLastMove()}
                               checkSquare={getCheckHighlight()?.square}
                               checkType={getCheckHighlight()?.type}
-                              interactive
+                              interactive={!boardMoveLoading}
                               onMove={handleBoardMove}
                               boardTheme={isPro ? boardTheme : "slate"}
                               showColorPicker={false}

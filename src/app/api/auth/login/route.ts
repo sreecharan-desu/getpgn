@@ -12,25 +12,43 @@ export async function POST(req: NextRequest) {
 
   try {
     const { username, password } = await req.json();
+    const identifier = String(username ?? '').trim();
 
-    if (!username || !password) {
-      return NextResponse.json({ error: 'Username and password are required.' }, { status: 400 });
+    if (!identifier || !password) {
+      return NextResponse.json(
+        { error: 'Username or email and password are required.' },
+        { status: 400 },
+      );
     }
 
-    const userLimit = rateLimit(`login:user:${String(username).toLowerCase()}`, 10, 15 * 60_000);
+    const rateKey = identifier.toLowerCase();
+    const userLimit = rateLimit(`login:user:${rateKey}`, 10, 15 * 60_000);
     if (!userLimit.ok) return rateLimitResponse(userLimit.retryAfterSec);
 
-    const user = await prisma.user.findUnique({
-      where: { username },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        passwordHash: true,
-        plan: true,
-        emailVerified: true,
-      },
-    });
+    const isEmail = identifier.includes('@');
+    const user = isEmail
+      ? await prisma.user.findUnique({
+          where: { email: identifier.toLowerCase() },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            passwordHash: true,
+            plan: true,
+            emailVerified: true,
+          },
+        })
+      : await prisma.user.findUnique({
+          where: { username: identifier },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            passwordHash: true,
+            plan: true,
+            emailVerified: true,
+          },
+        });
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 });

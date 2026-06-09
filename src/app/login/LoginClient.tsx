@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Lock } from "lucide-react";
+import { User, Lock, Mail } from "lucide-react";
 import { AuthSplitLayout } from "@/components/ui/AuthSplitLayout";
 import { IconInput } from "@/components/ui/IconInput";
 import { Feedback } from "@/components/ui/Feedback";
@@ -12,7 +12,7 @@ import { friendlyError, readApiError } from "@/lib/friendlyError";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,8 +24,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
 
-    if (!username || !password) {
-      setError("Please enter your username and password.");
+    if (!loginId || !password) {
+      setError("Please enter your username or email and password.");
       return;
     }
 
@@ -35,7 +35,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: loginId.trim(), password }),
       });
 
       if (!res.ok) {
@@ -93,16 +93,22 @@ export default function LoginPage() {
         )}
 
         <IconInput
-          id="username"
-          label="Username"
-          icon={<User className="h-4 w-4" />}
+          id="loginId"
+          label="Username or email"
+          icon={
+            loginId.includes("@") ? (
+              <Mail className="h-4 w-4" />
+            ) : (
+              <User className="h-4 w-4" />
+            )
+          }
           type="text"
           autoComplete="username"
           required
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          value={loginId}
+          onChange={(e) => setLoginId(e.target.value)}
           disabled={busy}
-          placeholder="your-username"
+          placeholder="your-username or you@email.com"
         />
 
         <div>

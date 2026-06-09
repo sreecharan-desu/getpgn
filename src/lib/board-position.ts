@@ -70,6 +70,26 @@ export function getLastMoveForPly(
   return [selected.uci.slice(0, 2), selected.uci.slice(2, 4)];
 }
 
+/** 1-based ply index to update when the user drags a piece on the board. */
+export function getBoardEditPlyIndex(
+  turns: BoardTurn[],
+  currentPlyIndex: number,
+): number {
+  if (currentPlyIndex === 0) return 1;
+
+  const selected = getPlyAt(turns, currentPlyIndex - 1);
+  if (
+    selected &&
+    (selected.status === "illegal" ||
+      selected.status === "ambiguous" ||
+      selected.status === "missing")
+  ) {
+    return currentPlyIndex;
+  }
+
+  return currentPlyIndex + 1;
+}
+
 /** Ply whose SAN drives check/checkmate highlight for the displayed position. */
 export function getCheckPlyForDisplay(
   turns: BoardTurn[],
