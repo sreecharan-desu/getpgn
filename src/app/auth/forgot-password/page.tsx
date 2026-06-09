@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { AuthShell } from "@/components/ui/AuthShell";
@@ -13,24 +13,28 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const submittingRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(false);
+    if (submittingRef.current) return;
 
-    if (!email) {
+    setError(null);
+
+    if (!email.trim()) {
       setError("Please enter your email address.");
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
+    setSuccess(false);
 
     try {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
         keepalive: true,
       });
 
@@ -41,12 +45,12 @@ export default function ForgotPasswordPage() {
       }
 
       setSuccess(true);
-      setEmail("");
     } catch (err: unknown) {
       setError(
         friendlyError(err, "We couldn't send the reset link. Please try again."),
       );
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -92,7 +96,7 @@ export default function ForgotPasswordPage() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || success}
           aria-busy={loading || undefined}
           className="btn-primary btn-md w-full"
         >

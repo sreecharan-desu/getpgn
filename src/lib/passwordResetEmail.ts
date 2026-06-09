@@ -61,18 +61,16 @@ export async function issuePasswordResetEmail(
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
 
-  const [emailResult] = await Promise.all([
-    sendPasswordResetEmail(email, token),
-    prisma.passwordResetToken.create({
-      data: {
-        userId,
-        token,
-        expiresAt,
-        used: false,
-      },
-    }),
-  ]);
+  await prisma.passwordResetToken.create({
+    data: {
+      userId,
+      token,
+      expiresAt,
+      used: false,
+    },
+  });
 
+  const emailResult = await sendPasswordResetEmail(email, token);
   if (!emailResult.success) {
     console.error(`[Password Reset] Resend failed for ${email}:`, emailResult.error);
   }

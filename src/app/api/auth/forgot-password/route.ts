@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { after } from 'next/server';
 import {
   getPasswordResetState,
   issuePasswordResetEmail,
   PASSWORD_RESET_COOLDOWN_SECONDS,
 } from '@/lib/passwordResetEmail';
 import { rateLimitByIp } from '@/lib/rateLimit';
+
+export const maxDuration = 30;
 
 const GENERIC_SUCCESS = {
   success: true,
@@ -44,11 +45,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    after(() => {
-      void issuePasswordResetEmail(userId, email).catch((err) => {
-        console.error('[Forgot Password] Background send failed:', err);
-      });
-    });
+    const sent = await issuePasswordResetEmail(userId, email);
+    if (!sent.success) {
+      console.error(`[Forgot Password] Email delivery failed for ${email}:`, sent.error);
+    }
 
     return NextResponse.json({
       ...GENERIC_SUCCESS,
