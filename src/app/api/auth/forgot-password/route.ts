@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { after } from 'next/server';
 import {
-  getPasswordResetCooldown,
+  getPasswordResetState,
+  issuePasswordResetEmail,
   PASSWORD_RESET_COOLDOWN_SECONDS,
-  queuePasswordResetEmail,
 } from '@/lib/passwordResetEmail';
 import { rateLimitByIp } from '@/lib/rateLimit';
 
@@ -24,12 +24,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, username: true },
-    });
+    const { userId, cooldownSeconds } = await getPasswordResetState(email);
 
-    if (!user) {
+    if (!userId) {
       console.log(`[Forgot Password] Requested email ${email} not found. Returning generic success.`);
       return NextResponse.json({
         ...GENERIC_SUCCESS,
@@ -37,7 +34,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const cooldownSeconds = await getPasswordResetCooldown(user.id);
     if (cooldownSeconds > 0) {
       return NextResponse.json(
         {
@@ -48,7 +44,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    queuePasswordResetEmail(user.id, email);
+    after(() => {
+      void issuePasswordResetEmail(userId, email).catch((err) => {
+        console.error('[Forgot Password] Background send failed:', err);
+      });
+    });
 
     return NextResponse.json({
       ...GENERIC_SUCCESS,

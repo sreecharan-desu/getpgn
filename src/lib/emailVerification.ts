@@ -17,9 +17,11 @@ export async function issueVerificationEmail(
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
 
-  await insertVerificationToken(userId, token, expiresAt);
+  const [emailResult] = await Promise.all([
+    sendVerificationEmail(email, token),
+    insertVerificationToken(userId, token, expiresAt),
+  ]);
 
-  const emailResult = await sendVerificationEmail(email, token);
   return { success: emailResult.success, error: emailResult.error };
 }
 
