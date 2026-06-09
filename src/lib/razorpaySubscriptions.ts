@@ -39,13 +39,7 @@ export const PLAN_SPECS: Record<
 /** How long the customer has to complete mandate authorisation at checkout. */
 export const SUBSCRIPTION_AUTH_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 
-/**
- * Razorpay rejects mandate auth once `start_at` is in the past. Schedule billing start
- * 24h ahead so customers have time for UPI QR, 3DS OTP, app switches, etc.
- */
-export const SUBSCRIPTION_START_AT_LEAD_SECONDS = SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
-
-/** Minimum seconds start_at must remain in the future to reuse a pending subscription. */
+/** Reject reusing a pending sub when expire_by is within this many seconds. */
 export const SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS = 10 * 60; // 10 minutes
 
 type RazorpayPlanEntity = {
@@ -134,17 +128,16 @@ export function buildSubscriptionCreatePayload(input: {
   const { planId, planType, userId, userEmail, now = new Date() } = input;
   const spec = PLAN_SPECS[planType];
   const nowSec = Math.floor(now.getTime() / 1000);
-  const startAt = nowSec + SUBSCRIPTION_START_AT_LEAD_SECONDS;
-  // Per Razorpay API sample: expire_by follows start_at (mandate auth must finish before start_at).
-  const expireBy = startAt + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
+  const expireBy = nowSec + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
 
-  // start_at + total_count + expire_by → end_at/charge_at at creation (Razorpay support requirement).
+  // Do NOT set start_at — Razorpay starts billing immediately after successful auth.
+  // Setting start_at in the future wrongly shifts "Next Due" (e.g. +24h) before payment.
+  // expire_by bounds how long the customer has to finish mandate authorisation at checkout.
   return {
     plan_id: planId,
     total_count: spec.totalCount,
     quantity: 1,
     customer_notify: true as const,
-    start_at: startAt,
     expire_by: expireBy,
     notes: {
       userId,
@@ -190,15 +183,10 @@ export function assertSubscriptionBounded(
     );
   }
 
-  if (subscription.end_at == null) {
-    throw new RazorpayPlanConfigError(
-      `Razorpay created subscription "${subscription.id}" without end_at (status=${subscription.status}). Ensure start_at and total_count are sent per Razorpay API docs.`,
-    );
-  }
-
-  if (subscription.start_at == null) {
+  // end_at is populated after authentication; null on status=created is expected without start_at.
+  if (subscription.end_at == null && subscription.status !== 'created') {
     console.warn(
-      `[Razorpay] Subscription ${subscription.id} has no start_at in response (status=${subscription.status}).`,
+      `[Razorpay] Subscription ${subscription.id} has no end_at (status=${subscription.status}).`,
     );
   }
 }
@@ -213,9 +201,16 @@ export function canCompleteSubscriptionAuth(
   nowSec = Math.floor(Date.now() / 1000),
 ): boolean {
   if (subscription.status !== 'created') return false;
-  if (subscription.expire_by != null && subscription.expire_by <= nowSec) return false;
-  if (subscription.start_at == null) return false;
-  return subscription.start_at > nowSec + SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS;
+  if (subscription.expire_by == null) return false;
+  if (subscription.expire_by <= nowSec + SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS) return false;
+  // Legacy subs created with a future start_at: auth must finish before start_at.
+  if (
+    subscription.start_at != null &&
+    subscription.start_at <= nowSec + SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** Reuse an open checkout subscription instead of creating duplicates on retry. */
@@ -234,7 +229,6 @@ export async function findReusablePendingSubscription(
         sub.plan_id === planId &&
         notes?.userId === userId &&
         notes?.planType === planType &&
-        sub.end_at != null &&
         canCompleteSubscriptionAuth(sub, nowSec)
       );
     });

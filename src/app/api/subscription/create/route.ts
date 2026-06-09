@@ -77,8 +77,9 @@ export async function POST(req: NextRequest) {
         });
         subscription = fetched;
       } else {
-        console.log('[Razorpay] Stale pending subscription skipped (start_at passed):', {
+        console.log('[Razorpay] Stale pending subscription skipped (auth window expired):', {
           id: reusable.id,
+          expire_by: fetched.expire_by,
           start_at: fetched.start_at,
         });
         subscription = await razorpay.subscriptions.create(payload);
@@ -88,8 +89,7 @@ export async function POST(req: NextRequest) {
         planType,
         planId,
         total_count: payload.total_count,
-        start_at: payload.start_at,
-        expire_by: payload.expire_by,
+      expire_by: payload.expire_by,
         userId: user.id,
       });
       subscription = await razorpay.subscriptions.create(payload);
