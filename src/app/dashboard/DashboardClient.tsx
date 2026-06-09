@@ -1800,7 +1800,7 @@ export default function DashboardClient({
     if (hasLibrary) {
       return (
         <div className="w-full space-y-6 pb-10">
-          <div className="space-y-1.5">
+          <div className="hidden space-y-1.5 lg:block">
             {renderUploadGreeting()}
             {!imageUrl && !selectedFile ? (
               <p className="text-[15px] font-medium tracking-tight text-muted">
@@ -1810,16 +1810,16 @@ export default function DashboardClient({
           </div>
           {renderUploadScanLimitBanner()}
           {renderUploadError()}
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,400px)] lg:items-start lg:gap-8 xl:gap-10">
-            <div className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,400px)] lg:items-start lg:gap-8 xl:gap-10">
+            <div className="order-2 min-w-0 space-y-4 lg:order-1 lg:sticky lg:top-24 lg:self-start">
               {renderUploadSavedGamesLibrary(true)}
               {renderUploadLibraryInsights()}
               {renderUploadProPerks()}
             </div>
-            <div className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
-              {renderScanUsageMeter({ compact: true })}
+            <div className="order-1 min-w-0 space-y-4 lg:order-2 lg:sticky lg:top-24 lg:self-start">
+              {renderScanUsageMeter({ compact: true, className: "hidden lg:block" })}
               {!imageUrl ? (
-                <div className="flex items-center gap-3 px-1">
+                <div className="hidden items-center gap-3 px-1 lg:flex">
                   <div className="h-px flex-1 bg-line/45" />
                   <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
                     New scoresheet
@@ -1838,43 +1838,48 @@ export default function DashboardClient({
     if (!isPro) {
       return (
         <div className="w-full space-y-6 pb-4">
-          {showHero ? renderUploadGreeting() : null}
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-10 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-w-0 space-y-6">
-              {showHero ? renderUploadHero() : null}
+          {showHero ? (
+            <div className="hidden lg:block">{renderUploadGreeting()}</div>
+          ) : null}
+          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-10 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="order-1 min-w-0 space-y-4 lg:order-1 lg:space-y-6">
               {renderUploadScanLimitBanner()}
               {renderUploadError()}
               {renderUploadFormCard({ showHeading: false })}
               {!imageUrl && renderUploadFeaturePills()}
             </div>
-            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-              {renderScanUsageMeter()}
+            <aside className="order-2 space-y-4 lg:order-2 lg:sticky lg:top-24 lg:self-start">
+              {renderScanUsageMeter({ className: "hidden lg:block" })}
               <FreeVsProTable
                 compact
                 onUpgrade={() => setShowPricingModal(true)}
               />
             </aside>
           </div>
-          {!imageUrl && renderUploadLibraryOnboarding()}
+          {showHero ? (
+            <div className="hidden space-y-6 lg:block">
+              {renderUploadHero()}
+              {!imageUrl && renderUploadLibraryOnboarding()}
+            </div>
+          ) : null}
         </div>
       );
     }
 
     return (
       <div className="w-full space-y-6 pb-6">
-        {renderUploadGreeting()}
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,400px)] lg:items-start lg:gap-10 xl:gap-12">
-          <div className="min-w-0 space-y-6">
-            {showHero ? renderUploadHero() : null}
-            {!imageUrl && renderUploadLibraryOnboarding(true)}
-            {!imageUrl && renderUploadFeaturePills(true)}
-          </div>
-          <div className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
-            {renderScanUsageMeter({ compact: true })}
+        <div className="hidden lg:block">{renderUploadGreeting()}</div>
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,400px)] lg:items-start lg:gap-10 xl:gap-12">
+          <div className="order-1 min-w-0 space-y-4 lg:order-2 lg:sticky lg:top-24 lg:self-start">
             {renderUploadScanLimitBanner()}
             {renderUploadError()}
             {renderUploadFormCard({ showHeading: !imageUrl, wide: true })}
+            {!imageUrl && renderUploadFeaturePills(true)}
             {renderUploadProPerks()}
+          </div>
+          <div className="order-2 hidden min-w-0 space-y-6 lg:order-1 lg:block">
+            {showHero ? renderUploadHero() : null}
+            {!imageUrl && renderUploadLibraryOnboarding(true)}
           </div>
         </div>
       </div>
@@ -3287,6 +3292,7 @@ export default function DashboardClient({
                       isPaid={!!isPro}
                       gameId={activeGameId}
                       sharedSlug={activeGameSharedSlug}
+                      onSave={handleSaveGame}
                       onShare={handleShareGame}
                     />
 
