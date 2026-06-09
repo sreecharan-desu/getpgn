@@ -31,24 +31,14 @@ export function mapRazorpayPaymentFailure(error: {
   }
 
   if (
-    lower.includes('something went wrong') ||
-    lower.includes('server error') ||
-    lower.includes('try again')
-  ) {
-    return (
-      'UPI subscription setup failed on Razorpay. Subscriptions need card e-mandate — ' +
-      'UPI often errors on mobile web. Please pay with a credit/debit card that supports recurring mandates.'
-    );
-  }
-
-  if (
     lower.includes('upi') ||
     lower.includes('cancelled the payment') ||
-    lower.includes('delay in response')
+    lower.includes('delay in response') ||
+    lower.includes('something went wrong')
   ) {
     return (
-      'UPI subscription setup did not complete. Use Card instead — ' +
-      'UPI recurring mandates are unreliable in browser checkout. Pick a card that supports e-mandates.'
+      'UPI subscription setup did not complete. Try again, use UPI QR if available, ' +
+      'or pay with a card that supports recurring mandates.'
     );
   }
 

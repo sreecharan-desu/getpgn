@@ -2054,11 +2054,6 @@ export default function DashboardClient({
   const handleCreateSubscription = async (plan: "monthly" | "yearly") => {
     setBillingLoading(true);
     try {
-      toast.info("Card required for Pro subscription", {
-        description:
-          "After OTP, your bank must approve a recurring mandate. Credit cards work best; UPI is not supported here.",
-        duration: 7000,
-      });
       await openRazorpayCheckout({
         plan,
         username: user.username,

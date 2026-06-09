@@ -141,21 +141,6 @@ export async function openRazorpayCheckout({
       ...(data.email ? { email: data.email } : {}),
     },
     theme: { color: "#0a0a0a" },
-    // Subscriptions need card e-mandate auth. UPI often fails ("something went wrong") on mobile web.
-    config: {
-      display: {
-        blocks: {
-          cards_only: {
-            name: "Pay with card",
-            instruments: [{ method: "card" }],
-          },
-        },
-        sequence: ["block.cards_only"],
-        preferences: {
-          show_default_blocks: false,
-        },
-      },
-    },
   };
 
   const rzp = new window.Razorpay!(options);
