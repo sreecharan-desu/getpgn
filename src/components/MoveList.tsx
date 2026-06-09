@@ -205,6 +205,17 @@ export const MoveList: React.FC<MoveListProps> = ({
   const handleNext = () => { if (currentPlyIndex < totalPlies) selectPly(currentPlyIndex + 1); };
   const handleLast = () => selectPly(totalPlies);
 
+  const togglePlay = () => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+    if (currentPlyIndex >= totalPlies) {
+      onSelectPly(0);
+    }
+    setIsPlaying(true);
+  };
+
   const startEdit = useCallback((ply: Ply) => {
     if (!editable) return;
     setMenu(null);
@@ -387,7 +398,7 @@ export const MoveList: React.FC<MoveListProps> = ({
           ))}
           {showPlay && (
             <button
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={togglePlay}
               disabled={totalPlies === 0}
               className={`flex h-9 cursor-pointer items-center gap-2 rounded-[8px] px-5 text-[13px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
                 isPlaying ? 'bg-ink text-paper hover:bg-ink-soft' : 'border border-line-strong bg-paper text-ink hover:bg-surface-2'
