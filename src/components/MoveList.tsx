@@ -127,10 +127,27 @@ export const MoveList: React.FC<MoveListProps> = ({
 
   useEffect(() => {
     if (!isPlaying || currentPlyIndex === 0) return;
-    const row = listScrollRef.current?.querySelector(
+    const container = listScrollRef.current;
+    if (!container) return;
+    const row = container.querySelector(
       `[data-ply-index="${currentPlyIndex}"]`,
-    );
-    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    ) as HTMLElement | null;
+    if (!row) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+
+    if (rowRect.top < containerRect.top) {
+      container.scrollTo({
+        top: container.scrollTop + (rowRect.top - containerRect.top),
+        behavior: 'smooth',
+      });
+    } else if (rowRect.bottom > containerRect.bottom) {
+      container.scrollTo({
+        top: container.scrollTop + (rowRect.bottom - containerRect.bottom),
+        behavior: 'smooth',
+      });
+    }
   }, [currentPlyIndex, isPlaying]);
 
   // Sync the text editor whenever we switch into Text mode.
@@ -428,7 +445,7 @@ export const MoveList: React.FC<MoveListProps> = ({
       {controlsPlacement === 'top' && playbackBar('top')}
 
       {/* Body */}
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto p-3">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto overscroll-y-contain p-3">
         {turns.length === 0 && viewMode === 'list' ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
             <div className="grid h-11 w-11 place-items-center rounded-full border border-line-strong bg-surface">

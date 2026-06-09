@@ -3231,7 +3231,7 @@ export default function DashboardClient({
                       {/* Move sheet — directly under board on mobile; right column on lg */}
                       <div className="order-2 flex min-w-0 flex-col gap-2 lg:col-start-2 lg:row-start-1 lg:row-span-3">
                         <div
-                          className="flex min-h-0 flex-col overflow-hidden lg:min-h-[280px]"
+                          className="flex h-[min(420px,45vh)] min-h-0 flex-col overflow-hidden lg:h-auto lg:min-h-[280px]"
                           style={
                             boardCardHeight != null && boardCardHeight > 0
                               ? { height: boardCardHeight }
