@@ -39,8 +39,14 @@ export const PLAN_SPECS: Record<
 /** How long the customer has to complete mandate authorisation at checkout. */
 export const SUBSCRIPTION_AUTH_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 
-/** Razorpay rejects start_at at exact server second — pad slightly into the future. */
-export const SUBSCRIPTION_START_AT_BUFFER_SECONDS = 60;
+/**
+ * Razorpay rejects mandate auth once `start_at` is in the past. Schedule billing start
+ * 24h ahead so customers have time for UPI QR, 3DS OTP, app switches, etc.
+ */
+export const SUBSCRIPTION_START_AT_LEAD_SECONDS = SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
+
+/** Minimum seconds start_at must remain in the future to reuse a pending subscription. */
+export const SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS = 10 * 60; // 10 minutes
 
 type RazorpayPlanEntity = {
   id: string;
@@ -128,11 +134,11 @@ export function buildSubscriptionCreatePayload(input: {
   const { planId, planType, userId, userEmail, now = new Date() } = input;
   const spec = PLAN_SPECS[planType];
   const nowSec = Math.floor(now.getTime() / 1000);
-  const startAt = nowSec + SUBSCRIPTION_START_AT_BUFFER_SECONDS;
-  const expireBy = nowSec + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
+  const startAt = nowSec + SUBSCRIPTION_START_AT_LEAD_SECONDS;
+  // Per Razorpay API sample: expire_by follows start_at (mandate auth must finish before start_at).
+  const expireBy = startAt + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
 
-  // Per Razorpay Create Subscription docs: start_at + total_count + expire_by are required
-  // for end_at/charge_at to be set at creation (support flags subs with null end_at otherwise).
+  // start_at + total_count + expire_by → end_at/charge_at at creation (Razorpay support requirement).
   return {
     plan_id: planId,
     total_count: spec.totalCount,
@@ -201,6 +207,17 @@ type RazorpaySubscriptionsList = {
   items?: RazorpaySubscriptionEntity[];
 };
 
+/** True when the customer can still complete mandate authorisation at checkout. */
+export function canCompleteSubscriptionAuth(
+  subscription: Pick<RazorpaySubscriptionEntity, 'status' | 'start_at' | 'expire_by'>,
+  nowSec = Math.floor(Date.now() / 1000),
+): boolean {
+  if (subscription.status !== 'created') return false;
+  if (subscription.expire_by != null && subscription.expire_by <= nowSec) return false;
+  if (subscription.start_at == null) return false;
+  return subscription.start_at > nowSec + SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS;
+}
+
 /** Reuse an open checkout subscription instead of creating duplicates on retry. */
 export async function findReusablePendingSubscription(
   razorpay: Razorpay,
@@ -214,14 +231,11 @@ export async function findReusablePendingSubscription(
     const match = (list.items ?? []).find((sub) => {
       const notes = (sub as { notes?: Record<string, string> }).notes;
       return (
-        sub.status === 'created' &&
         sub.plan_id === planId &&
         notes?.userId === userId &&
         notes?.planType === planType &&
-        sub.expire_by != null &&
-        sub.expire_by > nowSec &&
         sub.end_at != null &&
-        sub.start_at != null
+        canCompleteSubscriptionAuth(sub, nowSec)
       );
     });
     return match ?? null;

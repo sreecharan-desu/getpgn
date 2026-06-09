@@ -11,6 +11,7 @@ import {
 import {
   assertSubscriptionBounded,
   buildSubscriptionCreatePayload,
+  canCompleteSubscriptionAuth,
   fetchAndValidatePlan,
   findReusablePendingSubscription,
   RazorpayPlanConfigError,
@@ -57,31 +58,48 @@ export async function POST(req: NextRequest) {
     );
 
     let subscription;
-    if (reusable?.id) {
-      console.log('[Razorpay] Reusing pending subscription:', {
-        id: reusable.id,
-        planType,
-        userId: user.id,
-        expire_by: reusable.expire_by,
-      });
-      subscription = await razorpay.subscriptions.fetch(reusable.id);
-    } else {
-      const payload = buildSubscriptionCreatePayload({
-        planId,
-        planType,
-        userId: user.id,
-        userEmail: user.email,
-      });
-
-    console.log('[Razorpay] Creating subscription:', {
-      planType,
+    const payload = buildSubscriptionCreatePayload({
       planId,
-      total_count: payload.total_count,
-      start_at: payload.start_at,
-      expire_by: payload.expire_by,
+      planType,
       userId: user.id,
+      userEmail: user.email,
     });
 
+    if (reusable?.id) {
+      const fetched = await razorpay.subscriptions.fetch(reusable.id);
+      if (canCompleteSubscriptionAuth(fetched)) {
+        console.log('[Razorpay] Reusing pending subscription:', {
+          id: fetched.id,
+          planType,
+          userId: user.id,
+          start_at: fetched.start_at,
+          expire_by: fetched.expire_by,
+        });
+        subscription = fetched;
+      } else {
+        console.log('[Razorpay] Stale pending subscription skipped (start_at passed):', {
+          id: reusable.id,
+          start_at: fetched.start_at,
+        });
+        subscription = await razorpay.subscriptions.create(payload);
+      }
+    } else {
+      console.log('[Razorpay] Creating subscription:', {
+        planType,
+        planId,
+        total_count: payload.total_count,
+        start_at: payload.start_at,
+        expire_by: payload.expire_by,
+        userId: user.id,
+      });
+      subscription = await razorpay.subscriptions.create(payload);
+    }
+
+    if (!canCompleteSubscriptionAuth(subscription)) {
+      console.warn('[Razorpay] Subscription not auth-ready; creating fresh:', {
+        id: subscription.id,
+        start_at: subscription.start_at,
+      });
       subscription = await razorpay.subscriptions.create(payload);
     }
 
@@ -94,6 +112,12 @@ export async function POST(req: NextRequest) {
       },
       planType,
     );
+
+    if (!canCompleteSubscriptionAuth(subscription)) {
+      throw new RazorpayPlanConfigError(
+        `Subscription "${subscription.id}" cannot accept auth (start_at=${subscription.start_at}).`,
+      );
+    }
 
     console.log('[Razorpay] Subscription created:', {
       id: subscription.id,

@@ -10,6 +10,13 @@ export function mapRazorpayPaymentFailure(error: {
   const source = error.source ?? '';
   const lower = description.toLowerCase();
 
+  if (lower.includes('start time is past') || lower.includes('cannot do an auth transaction')) {
+    return (
+      'This checkout session expired. Close the payment window and try upgrading again — ' +
+      'a fresh subscription link will be created.'
+    );
+  }
+
   if (
     reason === 'card_declined' ||
     source === 'issuer_bank' ||
