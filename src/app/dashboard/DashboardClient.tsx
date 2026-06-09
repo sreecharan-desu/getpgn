@@ -85,8 +85,8 @@ import {
   LayoutGrid,
   Download,
   Search,
-  Pause,
-  Play,
+  // Pause,
+  // Play,
 } from "lucide-react";
 
 import { RazorpayLogo } from "@/components/ui/RazorpayLogo";
@@ -255,7 +255,7 @@ export default function DashboardClient({
     "monthly" | "yearly"
   >("yearly");
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
-  const [showPauseConfirm, setShowPauseConfirm] = useState<boolean>(false);
+  // const [showPauseConfirm, setShowPauseConfirm] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<SavedGame | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
@@ -2090,76 +2090,76 @@ export default function DashboardClient({
     }
   };
 
-  const handlePauseSubscription = async () => {
-    setBillingLoading(true);
-    try {
-      const res = await fetch("/api/subscription/pause", { method: "POST" });
-      if (!res.ok) {
-        const apiErr = await readApiErrorOrLogout(
-          res,
-          "We couldn't pause your subscription. Please try again.",
-        );
-        if (apiErr === null) return;
-        throw new Error(apiErr);
-      }
-
-      setUser((prev) => ({
-        ...prev,
-        subscriptionStatus: "paused",
-      }));
-      setShowPauseConfirm(false);
-      toast.success("Subscription paused", {
-        description: "Billing is on hold and Pro access is suspended until you resume.",
-      });
-      router.refresh();
-    } catch (err: unknown) {
-      console.error(err);
-      toast.error(
-        friendlyError(err, "We couldn't pause your subscription. Please try again."),
-      );
-    } finally {
-      setBillingLoading(false);
-    }
-  };
-
-  const handleResumeSubscription = async () => {
-    setBillingLoading(true);
-    try {
-      const res = await fetch("/api/subscription/resume", { method: "POST" });
-      if (!res.ok) {
-        const apiErr = await readApiErrorOrLogout(
-          res,
-          "We couldn't resume your subscription. Please try again.",
-        );
-        if (apiErr === null) return;
-        throw new Error(apiErr);
-      }
-
-      const data = (await res.json()) as {
-        subscriptionStatus?: string;
-        subscriptionEnd?: string | null;
-      };
-
-      setUser((prev) => ({
-        ...prev,
-        subscriptionStatus: data.subscriptionStatus ?? "active",
-        ...(data.subscriptionEnd
-          ? { subscriptionEnd: data.subscriptionEnd }
-          : {}),
-      }));
-      toast.success("Subscription resumed", {
-        description: "Pro billing and access are active again.",
-      });
-      router.refresh();
-    } catch (err: unknown) {
-      console.error(err);
-      toast.error(
-        friendlyError(err, "We couldn't resume your subscription. Please try again."),
-      );
-    } finally {
-      setBillingLoading(false);
-    }
-  };
+  // const handlePauseSubscription = async () => {
+  //   setBillingLoading(true);
+  //   try {
+  //     const res = await fetch("/api/subscription/pause", { method: "POST" });
+  //     if (!res.ok) {
+  //       const apiErr = await readApiErrorOrLogout(
+  //         res,
+  //         "We couldn't pause your subscription. Please try again.",
+  //       );
+  //       if (apiErr === null) return;
+  //       throw new Error(apiErr);
+  //     }
+  //
+  //     setUser((prev) => ({
+  //       ...prev,
+  //       subscriptionStatus: "paused",
+  //     }));
+  //     setShowPauseConfirm(false);
+  //     toast.success("Subscription paused", {
+  //       description: "Billing is on hold and Pro access is suspended until you resume.",
+  //     });
+  //     router.refresh();
+  //   } catch (err: unknown) {
+  //     console.error(err);
+  //     toast.error(
+  //       friendlyError(err, "We couldn't pause your subscription. Please try again."),
+  //     );
+  //   } finally {
+  //     setBillingLoading(false);
+  //   }
+  // };
+  //
+  // const handleResumeSubscription = async () => {
+  //   setBillingLoading(true);
+  //   try {
+  //     const res = await fetch("/api/subscription/resume", { method: "POST" });
+  //     if (!res.ok) {
+  //       const apiErr = await readApiErrorOrLogout(
+  //         res,
+  //         "We couldn't resume your subscription. Please try again.",
+  //       );
+  //       if (apiErr === null) return;
+  //       throw new Error(apiErr);
+  //     }
+  //
+  //     const data = (await res.json()) as {
+  //       subscriptionStatus?: string;
+  //       subscriptionEnd?: string | null;
+  //     };
+  //
+  //     setUser((prev) => ({
+  //       ...prev,
+  //       subscriptionStatus: data.subscriptionStatus ?? "active",
+  //       ...(data.subscriptionEnd
+  //         ? { subscriptionEnd: data.subscriptionEnd }
+  //         : {}),
+  //     }));
+  //     toast.success("Subscription resumed", {
+  //       description: "Pro billing and access are active again.",
+  //     });
+  //     router.refresh();
+  //   } catch (err: unknown) {
+  //     console.error(err);
+  //     toast.error(
+  //       friendlyError(err, "We couldn't resume your subscription. Please try again."),
+  //     );
+  //   } finally {
+  //     setBillingLoading(false);
+  //   }
+  // };
 
   const handleCancelSubscription = async () => {
     setBillingLoading(true);
@@ -2684,6 +2684,16 @@ export default function DashboardClient({
           </p>
         )}
         {isRealRazorpaySubscription(user) && user.subscriptionStatus === "active" && (
+          <button
+            onClick={() => setShowCancelConfirm(true)}
+            disabled={billingLoading}
+            className="mt-2.5 py-1.5 px-3.5 bg-paper hover:bg-danger-bg border border-line-strong hover:border-[#fbcfe3] text-muted hover:text-danger font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+          >
+            Cancel subscription
+          </button>
+        )}
+        {/* Pause/resume hidden until Razorpay enables the feature on the account.
+        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "active" && (
           <div className="mt-2.5 flex flex-wrap gap-2">
             <button
               onClick={() => setShowPauseConfirm(true)}
@@ -2692,13 +2702,6 @@ export default function DashboardClient({
             >
               <Pause className="w-3 h-3" />
               Pause subscription
-            </button>
-            <button
-              onClick={() => setShowCancelConfirm(true)}
-              disabled={billingLoading}
-              className="py-1.5 px-3.5 bg-paper hover:bg-danger-bg border border-line-strong hover:border-[#fbcfe3] text-muted hover:text-danger font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Cancel subscription
             </button>
           </div>
         )}
@@ -2712,6 +2715,7 @@ export default function DashboardClient({
             Resume subscription
           </button>
         )}
+        */}
         {isRealRazorpaySubscription(user) && user.subscriptionStatus === "cancelled" && (
           <p className="mt-2 text-[10px] text-muted">
             To subscribe again, choose a plan from the upgrade options.
@@ -3667,7 +3671,7 @@ export default function DashboardClient({
         }}
       />
 
-      <ConfirmDialog
+      {/* <ConfirmDialog
         open={showPauseConfirm}
         title="Pause subscription?"
         description="Billing stops immediately and Pro access is suspended until you resume. You can resume anytime from this screen."
@@ -3676,7 +3680,7 @@ export default function DashboardClient({
         loading={billingLoading}
         onConfirm={handlePauseSubscription}
         onCancel={() => setShowPauseConfirm(false)}
-      />
+      /> */}
 
       <ConfirmDialog
         open={showCancelConfirm}
