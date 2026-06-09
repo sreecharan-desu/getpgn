@@ -66,9 +66,21 @@ Powered by Next.js 15, Prisma, python-chess validation, and advanced Gemini Mult
    - `JWT_SECRET`: Random hash for JWT authentication.
    - `RESEND_API_KEY`: API Key from Resend.
    - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Matching Test or Live keys from Razorpay.
-   - `RAZORPAY_MONTHLY_PLAN_ID` / `RAZORPAY_YEARLY_PLAN_ID`: Subscription plan IDs.
+   - `RAZORPAY_MONTHLY_PLAN_ID` / `RAZORPAY_YEARLY_PLAN_ID`: Subscription **plan** IDs (must have `period` + `interval` — see below).
    - `RAZORPAY_WEBHOOK_SECRET`: Webhook signing secret for subscription events.
    - Razorpay webhook URL (production): `https://getpgn.com/api/webhooks/razorpay`
+
+   **Razorpay plans (required):** Plans must be created as recurring subscription plans with billing cycle:
+   - Monthly: `period=monthly`, `interval=1`, amount `10000` paise (₹100)
+   - Yearly: `period=yearly`, `interval=1`, amount `100000` paise (₹1,000)
+
+   Create them via Dashboard (**Subscriptions → Plans**) or run:
+
+   ```bash
+   node --env-file=.env scripts/razorpay-setup-plans.mjs
+   ```
+
+   Then set the printed plan IDs in env. Subscriptions are created by the API with `total_count` and `expire_by` per [Razorpay docs](https://razorpay.com/docs/api/payments/subscriptions/create-subscription/).
 
 5. Initialize Database:
    ```bash

@@ -8,9 +8,16 @@ import {
   PLAN_UNAVAILABLE,
   readRazorpayConfig,
 } from '@/lib/razorpayServer';
+import {
+  assertSubscriptionBounded,
+  buildSubscriptionCreatePayload,
+  fetchAndValidatePlan,
+  RazorpayPlanConfigError,
+  type BillingPlanType,
+} from '@/lib/razorpaySubscriptions';
 
 export async function POST(req: NextRequest) {
-  let planType: 'monthly' | 'yearly' = 'monthly';
+  let planType: BillingPlanType = 'monthly';
 
   try {
     const auth = await requireVerifiedUser();
@@ -38,16 +45,43 @@ export async function POST(req: NextRequest) {
 
     const { config } = razorpayEnv;
     const razorpay = createRazorpayClient(config);
-    const totalCount = planType === 'monthly' ? 60 : 5;
 
-    const subscription = await razorpay.subscriptions.create({
-      plan_id: planId,
-      total_count: totalCount,
-      quantity: 1,
-      notes: {
-        userId: user.id,
-        planType,
+    await fetchAndValidatePlan(razorpay, planId, planType);
+
+    const payload = buildSubscriptionCreatePayload({
+      planId,
+      planType,
+      userId: user.id,
+      userEmail: user.email,
+    });
+
+    console.log('[Razorpay] Creating subscription:', {
+      planType,
+      planId,
+      total_count: payload.total_count,
+      expire_by: payload.expire_by,
+      userId: user.id,
+    });
+
+    const subscription = await razorpay.subscriptions.create(payload);
+
+    assertSubscriptionBounded(
+      subscription as {
+        id: string;
+        total_count?: number | null;
+        end_at?: number | null;
+        status?: string;
       },
+      planType,
+    );
+
+    console.log('[Razorpay] Subscription created:', {
+      id: subscription.id,
+      status: subscription.status,
+      total_count: subscription.total_count,
+      end_at: subscription.end_at,
+      expire_by: subscription.expire_by,
+      remaining_count: subscription.remaining_count,
     });
 
     return NextResponse.json({
@@ -58,6 +92,12 @@ export async function POST(req: NextRequest) {
       plan: planType,
     });
   } catch (error) {
+    if (error instanceof RazorpayPlanConfigError) {
+      console.error('[Razorpay] Plan configuration error:', error.message);
+      logRazorpayDiagnostics(planType, 'plan_config_invalid');
+      return NextResponse.json({ error: PLAN_UNAVAILABLE }, { status: 503 });
+    }
+
     console.error('Create subscription error:', error);
     const mapped = mapRazorpayError(error, planType);
     return NextResponse.json({ error: mapped.message }, { status: mapped.status });

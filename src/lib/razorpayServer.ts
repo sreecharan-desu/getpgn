@@ -1,4 +1,5 @@
 import Razorpay from 'razorpay';
+import { isValidPlanId } from '@/lib/razorpaySubscriptions';
 
 export type RazorpayConfig = {
   keyId: string;
@@ -72,6 +73,10 @@ export function getRazorpayPlanId(planType: 'monthly' | 'yearly'): string | null
   );
 
   if (!planId || planId.includes('placeholder')) return null;
+  if (!isValidPlanId(planId)) {
+    console.error(`[Razorpay] Invalid plan id format for ${planType}: ${planId}`);
+    return null;
+  }
   return planId;
 }
 
@@ -125,6 +130,19 @@ export function mapRazorpayError(error: unknown, planType?: string): { status: n
   if (code === 400 && description.toLowerCase().includes('plan')) {
     logRazorpayDiagnostics(planType, 'plan_not_found');
     return { status: 503, message: PLAN_UNAVAILABLE };
+  }
+
+  const lower = description.toLowerCase();
+  if (
+    lower.includes('recurring') &&
+    (lower.includes('not enabled') || lower.includes('does not support'))
+  ) {
+    logRazorpayDiagnostics(planType, 'recurring_not_enabled');
+    return {
+      status: 503,
+      message:
+        "Recurring payments aren't enabled on this account yet. Contact Razorpay support to enable Subscriptions and card mandates.",
+    };
   }
 
   console.error('[Razorpay] Checkout error:', { statusCode: code, description });

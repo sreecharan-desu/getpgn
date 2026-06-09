@@ -2,9 +2,14 @@ import { friendlyError } from '@/lib/friendlyError';
 
 export type BillingPlan = "monthly" | "yearly";
 
+type RazorpayCheckoutInstance = {
+  open: () => void;
+  on: (event: string, handler: (response: unknown) => void) => void;
+};
+
 declare global {
   interface Window {
-    Razorpay?: new (options: unknown) => { open: () => void };
+    Razorpay?: new (options: unknown) => RazorpayCheckoutInstance;
   }
 }
 
@@ -81,7 +86,12 @@ export async function openRazorpayCheckout({
     return;
   }
 
-  const data = (await res.json()) as { keyId: string; subscription_id: string };
+  const data = (await res.json()) as {
+    keyId: string;
+    subscription_id: string;
+    username?: string;
+    email?: string;
+  };
 
   const options = {
     key: data.keyId,
@@ -125,10 +135,28 @@ export async function openRazorpayCheckout({
         onError("We couldn't confirm your payment. Please try again.");
       }
     },
-    prefill: username ? { name: username } : undefined,
+    prefill: {
+      ...(username || data.username ? { name: username ?? data.username } : {}),
+      ...(data.email ? { email: data.email } : {}),
+    },
     theme: { color: "#0a0a0a" },
   };
 
   const rzp = new window.Razorpay!(options);
+  rzp.on("payment.failed", (raw) => {
+    const response = raw as { error?: { description?: string; reason?: string } };
+    const reason = response.error?.description ?? response.error?.reason ?? "";
+    const lower = reason.toLowerCase();
+    if (
+      lower.includes("recurring") &&
+      (lower.includes("not enabled") || lower.includes("does not support"))
+    ) {
+      onError(
+        "Recurring payments aren't enabled on this account yet. Use a card that supports mandates, or contact support.",
+      );
+      return;
+    }
+    onError(friendlyError(reason, "Payment failed. Please try again or use a different card."));
+  });
   rzp.open();
 }

@@ -4,7 +4,11 @@ import { prisma } from '@/lib/db';
 import { apiError, assertSameOrigin } from '@/lib/security';
 import { rateLimitByIp } from '@/lib/rateLimit';
 import crypto from 'crypto';
-import Razorpay from 'razorpay';
+import {
+  createRazorpayClient,
+  readRazorpayConfig,
+} from '@/lib/razorpayServer';
+import type { BillingPlanType } from '@/lib/razorpaySubscriptions';
 
 export async function POST(req: NextRequest) {
   const limited = rateLimitByIp(req, 'subscription-verify', 10, 60_000);
@@ -25,17 +29,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing verification fields.' }, { status: 400 });
     }
 
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (!keyId || !keySecret) {
-      return NextResponse.json(
-        { error: "Payments aren't available right now. Please try again later." },
-        { status: 503 },
-      );
+    const razorpayEnv = readRazorpayConfig();
+    if (!razorpayEnv.ok) {
+      return NextResponse.json({ error: razorpayEnv.error }, { status: 503 });
     }
 
     const expectedSignature = crypto
-      .createHmac('sha256', keySecret)
+      .createHmac('sha256', razorpayEnv.config.keySecret)
       .update(`${razorpay_payment_id}|${razorpay_subscription_id}`)
       .digest('hex');
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Subscription already linked.' }, { status: 409 });
     }
 
-    const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    const razorpay = createRazorpayClient(razorpayEnv.config);
     const subscription = await razorpay.subscriptions.fetch(razorpay_subscription_id);
 
     const notes = (subscription.notes ?? {}) as Record<string, string>;
@@ -77,11 +77,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const planType = notes.planType === 'yearly' ? 'yearly' : 'monthly';
-    const durationDays = planType === 'yearly' ? 365 : 30;
+    const status = subscription.status ?? 'created';
+    if (!['authenticated', 'active', 'pending'].includes(status)) {
+      console.error('[Verify Subscription] Unexpected subscription status after checkout:', status);
+      return NextResponse.json(
+        { error: 'Subscription authorisation is not complete. Please try checkout again.' },
+        { status: 400 },
+      );
+    }
+
+    const planType: BillingPlanType = notes.planType === 'yearly' ? 'yearly' : 'monthly';
     const now = new Date();
-    const expiryDate = new Date();
-    expiryDate.setDate(now.getDate() + durationDays);
+    const periodEndSec =
+      subscription.current_end ??
+      subscription.end_at ??
+      null;
+    const expiryDate = periodEndSec
+      ? new Date(periodEndSec * 1000)
+      : new Date(now.getTime() + (planType === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000);
+    const periodStartSec = subscription.current_start ?? subscription.start_at ?? null;
+    const subscriptionStart = periodStartSec ? new Date(periodStartSec * 1000) : now;
 
     if (!existingPayment) {
       try {
@@ -108,7 +123,7 @@ export async function POST(req: NextRequest) {
         subscriptionId: razorpay_subscription_id,
         subscriptionPlan: planType,
         subscriptionStatus: 'active',
-        subscriptionStart: now,
+        subscriptionStart,
         subscriptionEnd: expiryDate,
         subscriptionExpiresAt: expiryDate,
         paymentProvider: 'razorpay',
