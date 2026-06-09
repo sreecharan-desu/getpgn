@@ -3573,7 +3573,7 @@ export default function DashboardClient({
 
               <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start shrink-0">
                 {renderScanUsageMeter({ compact: true })}
-                <section className="relative overflow-hidden bg-ink text-paper rounded-2xl p-4 gp-fade-up">
+                <section className="relative overflow-hidden rounded-[28px] bg-ink p-5 text-paper shadow-[var(--shadow-pop)] gp-fade-up">
                   <div className="relative space-y-2.5">
                     <h2 className="font-extrabold text-[15px] tracking-tight">
                       Unlock Pro
