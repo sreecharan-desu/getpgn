@@ -95,6 +95,7 @@ import {
   openRazorpayCheckout,
 } from "@/lib/razorpayCheckout";
 import {
+  buildProActivationScanFields,
   formatProScanAllowance,
   getScanPeriodKey,
   getScanUsage,
@@ -233,6 +234,9 @@ function computeMoveStats(turns: Turn[]) {
 
 /** Shared horizontal rhythm — keeps dashboard readable on wide screens. */
 const DASHBOARD_SHELL = "mx-auto w-full max-w-6xl";
+const PREMIUM_PANEL = "gp-premium-panel";
+const PREMIUM_PANEL_HEAD =
+  "border-b border-line/60 bg-surface-2/35 px-4 sm:px-5 py-3.5 flex items-center gap-2 shrink-0";
 /** Abort extraction if the API does not respond (prevents infinite overlay). */
 const EXTRACT_TIMEOUT_MS = 180_000;
 /** Narrow centered column for upload focus. */
@@ -1716,24 +1720,32 @@ export default function DashboardClient({
     );
   };
 
-  const renderUploadGreeting = (opts?: { centered?: boolean }) => (
-    <p
-      className={`text-[clamp(1.25rem,2.8vw,1.625rem)] font-semibold tracking-tight text-ink gp-fade-up ${
-        opts?.centered ? "text-center" : ""
-      }`}
-    >
-      {getTimeGreeting(user.username)}
-    </p>
-  );
+  const renderUploadGreeting = () => {
+    const full = getTimeGreeting(user.username);
+    const commaIdx = full.indexOf(", ");
+    const phrase = commaIdx >= 0 ? full.slice(0, commaIdx) : full;
+    const name = commaIdx >= 0 ? full.slice(commaIdx + 2) : null;
 
-  const renderUploadScreen = () => {
-    const hasLibrary = isPro && games.length > 0;
-    const showHero = !imageUrl && !selectedFile;
+    return (
+      <div className="gp-fade-up text-left">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-2">
+          {phrase}
+        </p>
+        {name ? (
+          <h2 className="mt-0.5 text-[clamp(1.375rem,3vw,1.875rem)] font-semibold tracking-[-0.02em] text-ink">
+            {name}
+          </h2>
+        ) : null}
+      </div>
+    );
+  };
 
-    const hero = showHero ? (
-      <div className={`${UPLOAD_FOCUS} text-center gp-fade-up`}>
-        {renderUploadGreeting({ centered: true })}
-        <div className="mb-4 mt-4 flex flex-wrap items-center justify-center gap-2">
+  const renderUploadHero = () => {
+    if (imageUrl || selectedFile) return null;
+
+    return (
+      <div className="w-full max-w-xl text-left gp-fade-up">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="chip">
             <span
               className={`h-1.5 w-1.5 rounded-full ${scansExhausted ? "bg-danger" : "bg-positive"}`}
@@ -1750,7 +1762,7 @@ export default function DashboardClient({
               : ""}
           </span>
         </div>
-        <h1 className="mt-3 text-[clamp(1.375rem,4vw,1.75rem)] font-semibold tracking-tight text-ink leading-snug">
+        <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-semibold tracking-[-0.02em] text-ink leading-[1.15]">
           {scansExhausted
             ? isPro
               ? scanUsage.periodUnit === "year"
@@ -1759,7 +1771,7 @@ export default function DashboardClient({
               : "Upgrade to keep digitizing"
             : "Digitize your chess games"}
         </h1>
-        <p className="mx-auto mt-2 max-w-[22rem] text-[14px] leading-relaxed text-muted">
+        <p className="mt-2.5 max-w-[26rem] text-[14px] leading-relaxed text-muted">
           {scansExhausted
             ? isPro
               ? scanUsage.periodUnit === "year"
@@ -1778,15 +1790,20 @@ export default function DashboardClient({
           </p>
         )}
       </div>
-    ) : null;
+    );
+  };
+
+  const renderUploadScreen = () => {
+    const hasLibrary = isPro && games.length > 0;
+    const showHero = !imageUrl && !selectedFile;
 
     if (hasLibrary) {
       return (
-        <div className="w-full space-y-5 pb-10">
-          <div className="space-y-1">
+        <div className="w-full space-y-6 pb-10">
+          <div className="space-y-1.5">
             {renderUploadGreeting()}
             {!imageUrl && !selectedFile ? (
-              <p className="text-[15px] font-semibold tracking-tight text-ink">
+              <p className="text-[15px] font-medium tracking-tight text-muted">
                 Pick up where you left off, or start a new scoresheet.
               </p>
             ) : null}
@@ -1820,10 +1837,11 @@ export default function DashboardClient({
 
     if (!isPro) {
       return (
-        <div className="w-full space-y-8 pb-4">
+        <div className="w-full space-y-6 pb-4">
+          {showHero ? renderUploadGreeting() : null}
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-10 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-w-0 space-y-8">
-              {hero}
+            <div className="min-w-0 space-y-6">
+              {showHero ? renderUploadHero() : null}
               {renderUploadScanLimitBanner()}
               {renderUploadError()}
               {renderUploadFormCard({ showHeading: false })}
@@ -1843,13 +1861,11 @@ export default function DashboardClient({
     }
 
     return (
-      <div className="w-full space-y-8 pb-6">
-        {!showHero ? (
-          <div className="space-y-1">{renderUploadGreeting()}</div>
-        ) : null}
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)] lg:items-start lg:gap-10">
+      <div className="w-full space-y-6 pb-6">
+        {renderUploadGreeting()}
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,400px)] lg:items-start lg:gap-10 xl:gap-12">
           <div className="min-w-0 space-y-6">
-            {hero}
+            {showHero ? renderUploadHero() : null}
             {!imageUrl && renderUploadLibraryOnboarding(true)}
             {!imageUrl && renderUploadFeaturePills(true)}
           </div>
@@ -2066,6 +2082,10 @@ export default function DashboardClient({
               subscriptionStatus: "active",
               subscriptionPlan: verifiedPlan,
               subscriptionId,
+              ...buildProActivationScanFields(
+                verifiedPlan,
+                prev.monthlyScanMonth,
+              ),
             }));
             setShowPricingModal(false);
             toast.success("Welcome to GetPGN Pro", {
@@ -2220,6 +2240,8 @@ export default function DashboardClient({
         subscriptionEnd: data.subscriptionEnd ?? null,
         subscriptionId: data.subscriptionId ?? null,
         paymentProvider: data.paymentProvider ?? "simulated",
+        monthlyScanCount: data.monthlyScanCount ?? prev.monthlyScanCount,
+        monthlyScanMonth: data.monthlyScanMonth ?? prev.monthlyScanMonth,
       }));
       toast.success("Dev: upgraded to Pro");
       router.refresh();
@@ -2301,12 +2323,12 @@ export default function DashboardClient({
 
   const renderAccountProfileSection = () => (
     <section
-      className="bg-surface border border-line rounded-2xl overflow-hidden gp-fade-up shrink-0"
+      className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
       style={{ animationDelay: "90ms" }}
     >
-      <div className="px-4 sm:px-5 py-3 border-b border-line flex items-center gap-2 shrink-0">
+      <div className={PREMIUM_PANEL_HEAD}>
         <ShieldCheck className="w-4 h-4 text-muted" />
-        <h2 className="font-semibold text-ink text-[14px]">
+        <h2 className="font-semibold text-ink text-[14px] tracking-tight">
           Profile &amp; security
         </h2>
       </div>
@@ -2316,7 +2338,7 @@ export default function DashboardClient({
             e.preventDefault();
             handleChangeUsername();
           }}
-          className="space-y-2.5"
+          className="gp-account-inset p-4 space-y-2.5"
           aria-label="Change username"
         >
           <h3 className="text-[13px] font-semibold text-ink">Username</h3>
@@ -2365,7 +2387,7 @@ export default function DashboardClient({
             e.preventDefault();
             handleChangePassword();
           }}
-          className="space-y-2.5"
+          className="gp-account-inset p-4 space-y-2.5"
           aria-label="Change password"
         >
           <h3 className="text-[13px] font-semibold text-ink">Password</h3>
@@ -2439,12 +2461,14 @@ export default function DashboardClient({
 
   const renderAccountBillingSection = () => (
     <section
-      className="bg-surface border border-line rounded-2xl overflow-hidden gp-fade-up shrink-0"
+      className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
       style={{ animationDelay: "120ms" }}
     >
-      <div className="px-4 sm:px-5 py-3 border-b border-line flex items-center gap-2">
+      <div className={PREMIUM_PANEL_HEAD}>
         <Receipt className="w-4 h-4 text-muted" />
-        <h2 className="font-semibold text-ink text-[14px]">Billing history</h2>
+        <h2 className="font-semibold text-ink text-[14px] tracking-tight">
+          Billing history
+        </h2>
       </div>
       {(() => {
         if (billingLoading) {
@@ -2590,30 +2614,32 @@ export default function DashboardClient({
 
   const renderAccountProBillingBlock = () => (
     <section
-      className="bg-surface border border-line rounded-2xl overflow-hidden gp-fade-up shrink-0"
+      className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
       style={{ animationDelay: "120ms" }}
     >
-      <div className="px-4 sm:px-5 py-3 border-b border-line flex items-center gap-2">
+      <div className={PREMIUM_PANEL_HEAD}>
         <CreditCard className="w-4 h-4 text-muted" />
-        <h2 className="font-semibold text-ink text-[14px]">Billing</h2>
+        <h2 className="font-semibold text-ink text-[14px] tracking-tight">
+          Billing
+        </h2>
       </div>
-      <div className="p-4 sm:px-5 sm:py-3.5">
-        <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2.5 text-[12px]">
-          <div>
-            <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
+      <div className="p-4 sm:px-5 sm:py-4">
+        <dl className="gp-billing-stat-grid text-[12px]">
+          <div className="gp-billing-stat">
+            <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
               Plan
             </dt>
-            <dd className="font-semibold text-ink flex items-center gap-1 mt-0.5">
+            <dd className="font-semibold text-ink flex items-center gap-1 mt-1">
               Pro · {user.subscriptionPlan || "paid"}
             </dd>
           </div>
-          <div>
-            <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
+          <div className="gp-billing-stat">
+            <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
               Status
             </dt>
-            <dd className="font-semibold text-ink mt-0.5">
+            <dd className="font-semibold text-ink mt-1">
               <span
-                className={`inline-flex items-center gap-1 ${
+                className={`inline-flex items-center gap-1.5 ${
                   user.subscriptionStatus === "cancelled" ||
                   user.subscriptionStatus === "paused"
                     ? "text-warn"
@@ -2634,11 +2660,11 @@ export default function DashboardClient({
               </span>
             </dd>
           </div>
-          <div>
-            <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
+          <div className="gp-billing-stat">
+            <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
               Provider
             </dt>
-            <dd className="text-ink mt-0.5">
+            <dd className="text-ink mt-1">
               {user.paymentProvider === "simulated" ? (
                 <span className="text-muted">Dev simulation</span>
               ) : (
@@ -2646,18 +2672,25 @@ export default function DashboardClient({
               )}
             </dd>
           </div>
-          {user.subscriptionEnd && (
-            <div>
-              <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
+          {user.subscriptionEnd ? (
+            <div className="gp-billing-stat">
+              <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
                 {user.subscriptionStatus === "cancelled"
                   ? "Access until"
                   : "Renews on"}
               </dt>
-              <dd className="font-semibold text-ink gp-nums mt-0.5">
+              <dd className="font-semibold text-ink gp-nums mt-1">
                 {new Date(user.subscriptionEnd).toLocaleDateString("en-US", {
                   dateStyle: "medium",
                 })}
               </dd>
+            </div>
+          ) : (
+            <div className="gp-billing-stat">
+              <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
+                Renews on
+              </dt>
+              <dd className="font-semibold text-muted mt-1">—</dd>
             </div>
           )}
         </dl>
@@ -2722,10 +2755,12 @@ export default function DashboardClient({
           </p>
         )}
       </div>
-      <div className="border-t border-line">
-        <div className="px-4 sm:px-5 py-2 border-b border-line flex items-center gap-2">
+      <div className="border-t border-line/60">
+        <div className="px-4 sm:px-5 py-2.5 border-b border-line/60 bg-surface-2/25 flex items-center gap-2">
           <Receipt className="w-3.5 h-3.5 text-muted" />
-          <h3 className="font-medium text-ink text-[13px]">History</h3>
+          <h3 className="font-medium text-ink text-[13px] tracking-tight">
+            History
+          </h3>
         </div>
         {billingLoading ? (
           <BillingRowSkeleton />
@@ -2746,10 +2781,12 @@ export default function DashboardClient({
                 user.subscriptionStatus === "cancelled");
             return (
               <>
-                <div className="px-4 sm:px-5 py-2.5 grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1.5 items-center">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Sparkles className="w-3.5 h-3.5 text-ink shrink-0" />
-                    <span className="text-[12px] font-medium text-ink truncate">
+                <div className="gp-history-row px-4 sm:px-5 py-3 grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1.5 items-center">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="grid place-items-center w-8 h-8 rounded-xl bg-ink text-paper shrink-0">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="text-[12px] font-semibold text-ink truncate">
                       GetPGN Pro — {cycle}
                     </span>
                   </div>
@@ -3436,35 +3473,56 @@ export default function DashboardClient({
       ) : (
         /* Account Settings View */
         <main
-          className={`flex-1 ${DASHBOARD_SHELL} px-4 sm:px-6 md:px-8 py-4 sm:py-5 flex flex-col gap-3 min-h-0 gp-fade-in`}
+          className={`flex-1 ${DASHBOARD_SHELL} px-4 sm:px-6 md:px-8 py-4 sm:py-6 flex flex-col gap-4 min-h-0 gp-fade-in`}
         >
-          {/* Back to dashboard */}
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className="shrink-0 inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted transition-colors hover:text-ink cursor-pointer"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back to dashboard
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className="inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted transition-colors hover:text-ink cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" /> Back to dashboard
+              </button>
+              <h1 className="mt-2 text-[clamp(1.375rem,3vw,1.75rem)] font-bold tracking-[-0.02em] text-ink">
+                Account
+              </h1>
+              <p className="mt-0.5 text-[13px] text-muted">
+                Profile, security, and billing in one place.
+              </p>
+            </div>
+          </div>
 
           {!isPro ? (
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-4 min-h-0 flex-1">
-              <div className="flex flex-col gap-3 min-w-0 min-h-0">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-5 min-h-0 flex-1">
+              <div className="flex flex-col gap-4 min-w-0 min-h-0">
                 {/* Identity card */}
-                <section className="bg-surface border border-line rounded-2xl p-4 sm:p-5 gp-fade-up shrink-0">
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <UserAvatar name={user.username} size={48} />
-                    <div className="min-w-0">
-                      <h1 className="text-lg sm:text-xl font-extrabold text-ink tracking-tight truncate">
+                <section className="gp-account-hero-soft gp-fade-up shrink-0">
+                  <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
+                    <UserAvatar name={user.username} size={56} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-2">
+                        Your account
+                      </p>
+                      <h2 className="mt-0.5 text-xl font-bold text-ink tracking-tight truncate">
                         {user.username}
-                      </h1>
-                      <div className="mt-1 flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2 rounded-full bg-surface-2 border border-line-strong text-muted">
+                      </h2>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2.5 rounded-full bg-surface-2 border border-line-strong text-muted">
                           Free plan
                         </span>
                         <span className="text-[11px] text-muted gp-nums">
-                          · {user.scanCount}/{FREE_SCAN_LIMIT} scans
+                          {scanUsage.used}/{scanUsage.limit} scans used
                         </span>
                       </div>
+                    </div>
+                    <div className="sm:text-right shrink-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-2">
+                        Remaining
+                      </p>
+                      <p className="mt-0.5 text-2xl font-bold tracking-tight text-ink gp-nums">
+                        {scanUsage.remaining}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted">free scans</p>
                     </div>
                   </div>
                 </section>
@@ -3472,12 +3530,12 @@ export default function DashboardClient({
                 {renderAccountProfileSection()}
 
                 <section
-                  className="bg-surface border border-line rounded-2xl overflow-hidden gp-fade-up shrink-0"
+                  className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
                   style={{ animationDelay: "105ms" }}
                 >
-                  <div className="px-4 sm:px-5 py-3 border-b border-line flex items-center gap-2">
+                  <div className={PREMIUM_PANEL_HEAD}>
                     <CreditCard className="w-4 h-4 text-muted" />
-                    <h2 className="font-semibold text-ink text-[14px]">
+                    <h2 className="font-semibold text-ink text-[14px] tracking-tight">
                       Your plan
                     </h2>
                   </div>
@@ -3494,7 +3552,7 @@ export default function DashboardClient({
                           Scans
                         </dt>
                         <dd className="font-semibold text-ink gp-nums mt-0.5">
-                          {user.scanCount}/{FREE_SCAN_LIMIT}
+                          {scanUsage.used}/{scanUsage.limit}
                         </dd>
                       </div>
                       <div>
@@ -3539,52 +3597,108 @@ export default function DashboardClient({
               </aside>
             </div>
           ) : (
-            <div className="flex flex-col gap-3 min-h-0 flex-1">
-              {/* Identity card */}
-              <section className="bg-surface border border-line rounded-2xl p-4 sm:px-5 gp-fade-up shrink-0">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="relative shrink-0">
-                    <UserAvatar name={user.username} size={48} />
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
-                      title="Pro member"
-                    >
-                      <Sparkles className="w-2.5 h-2.5 text-ink" />
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="text-lg sm:text-xl font-extrabold text-ink tracking-tight truncate">
-                      {user.username}
-                    </h1>
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2 rounded-full bg-ink text-paper">
-                        GetPGN Pro
+            <div className="flex flex-col gap-4 min-h-0 flex-1">
+              {/* Pro identity hero */}
+              <section className="gp-account-hero gp-fade-up shrink-0">
+                <span className="gp-account-hero__glow" aria-hidden />
+                <div className="relative p-5 sm:p-6 md:p-7">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
+                    <div className="relative shrink-0">
+                      <div className="rounded-full ring-2 ring-paper/15 ring-offset-2 ring-offset-transparent">
+                        <UserAvatar name={user.username} size={68} />
+                      </div>
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-7 h-7 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
+                        title="Pro member"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-ink" />
                       </span>
-                      {user.subscriptionPlan && (
-                        <span className="text-[11px] text-muted capitalize">
-                          · {user.subscriptionPlan} billing
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paper/45">
+                        Pro member
+                      </p>
+                      <h2 className="mt-0.5 text-xl sm:text-[1.65rem] font-bold tracking-[-0.02em] truncate">
+                        {user.username}
+                      </h2>
+                      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2.5 rounded-full bg-paper text-ink">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          GetPGN Pro
                         </span>
-                      )}
+                        {user.subscriptionPlan && (
+                          <span className="text-[11px] text-paper/55 capitalize">
+                            {user.subscriptionPlan} billing
+                          </span>
+                        )}
+                        {user.subscriptionEnd && (
+                          <span className="text-[11px] text-paper/40 gp-nums">
+                            ·{" "}
+                            {user.subscriptionStatus === "cancelled"
+                              ? "Access until"
+                              : "Renews"}{" "}
+                            {new Date(user.subscriptionEnd).toLocaleDateString(
+                              "en-US",
+                              { dateStyle: "medium" },
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="sm:text-right shrink-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-paper/40">
+                        Scans remaining
+                      </p>
+                      <p className="mt-0.5 text-[2rem] font-bold leading-none tracking-tight gp-nums">
+                        {scanUsage.remaining.toLocaleString()}
+                      </p>
+                      <p className="mt-1 text-[11px] text-paper/50 gp-nums">
+                        of {scanUsage.limit.toLocaleString()} this{" "}
+                        {scanUsage.periodUnit === "year" ? "year" : "month"}
+                      </p>
                     </div>
                   </div>
+                  <div className="mt-6 pt-5 border-t border-paper/10">
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-paper/45 mb-2.5">
+                      <span className="font-medium uppercase tracking-[0.1em]">
+                        Scan allowance
+                      </span>
+                      <span className="gp-nums font-semibold text-paper/70">
+                        {scanUsage.used.toLocaleString()}/
+                        {scanUsage.limit.toLocaleString()} used
+                      </span>
+                    </div>
+                    <div
+                      className="h-1.5 overflow-hidden rounded-full bg-paper/10"
+                      role="progressbar"
+                      aria-valuenow={scanUsage.used}
+                      aria-valuemin={0}
+                      aria-valuemax={scanUsage.limit}
+                    >
+                      <div
+                        className="h-full rounded-full bg-paper/85 transition-all duration-500"
+                        style={{
+                          width: `${Math.min(100, scanUsage.limit > 0 ? (scanUsage.used / scanUsage.limit) * 100 : 0)}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-paper/40">
+                      {scanUsage.periodUnit === "year"
+                        ? "Yearly allowance resets every January 1."
+                        : "Monthly allowance resets on the 1st of each month."}
+                    </p>
+                  </div>
                 </div>
               </section>
 
-              {renderAccountProfileSection()}
-
-              <section className="bg-surface border border-line rounded-2xl overflow-hidden gp-fade-up shrink-0">
-                <div className="px-4 sm:px-5 py-3 border-b border-line flex items-center gap-2">
-                  <History className="w-4 h-4 text-muted" />
-                  <h2 className="font-semibold text-ink text-[14px]">
-                    Scan usage
-                  </h2>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-5 min-h-0 lg:items-start">
+                <div className="flex flex-col gap-4 min-w-0">
+                  {renderAccountProfileSection()}
                 </div>
-                <div className="p-4 sm:px-5 sm:py-4">
-                  {renderScanUsageMeter({ compact: true })}
+                <div className="flex flex-col gap-4 min-w-0 lg:sticky lg:top-20">
+                  {renderAccountProBillingBlock()}
                 </div>
-              </section>
-
-              {renderAccountProBillingBlock()}
+              </div>
             </div>
           )}
         </main>
@@ -3622,7 +3736,7 @@ export default function DashboardClient({
       <PricingModal
         open={showPricingModal}
         onClose={() => setShowPricingModal(false)}
-        scanCount={user.scanCount}
+        scanCount={scanUsage.used}
         isPro={!!isPro}
         billingLoading={billingLoading}
         initialInterval={pricingInitialInterval}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
 import { isDevRouteAllowed, devRouteBlockedResponse, apiError } from '@/lib/security';
+import { buildProActivationScanFields } from '@/lib/scanLimits';
 
 export async function POST() {
   if (!isDevRouteAllowed()) return devRouteBlockedResponse();
@@ -26,6 +27,7 @@ export async function POST() {
         subscriptionStart: now,
         subscriptionEnd: expiryDate,
         paymentProvider: 'simulated',
+        ...buildProActivationScanFields('monthly', user.monthlyScanMonth),
       },
     });
 
@@ -43,6 +45,8 @@ export async function POST() {
       subscriptionEnd: updatedUser.subscriptionEnd?.toISOString() ?? null,
       subscriptionId: updatedUser.subscriptionId,
       paymentProvider: updatedUser.paymentProvider,
+      monthlyScanCount: updatedUser.monthlyScanCount,
+      monthlyScanMonth: updatedUser.monthlyScanMonth,
     });
   } catch (error) {
     return apiError('Billing Simulation', error);

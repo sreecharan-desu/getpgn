@@ -1401,3 +1401,138 @@ h1, h2, h3, h4 {
 .gp-ring-pulse {
   animation: gp-ring-pulse 2.8s ease-in-out infinite;
 }
+
+/* Premium dashboard — elevated panels & account hero */
+.gp-premium-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 50%, transparent);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+.gp-premium-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-paper) 72%, transparent) 0%,
+    transparent 42%
+  );
+  pointer-events: none;
+}
+.gp-premium-panel > * {
+  position: relative;
+}
+
+.gp-account-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  box-shadow: var(--shadow-pop);
+}
+.gp-account-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 100% 0%,
+      color-mix(in srgb, var(--color-paper) 8%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 40%,
+      color-mix(in srgb, var(--color-paper) 4%, transparent) 100%
+    );
+  pointer-events: none;
+}
+.gp-account-hero__glow {
+  position: absolute;
+  right: -3rem;
+  top: -3rem;
+  height: 12rem;
+  width: 12rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-paper) 6%, transparent);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.gp-account-hero-soft {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-surface) 80%, var(--color-paper)) 0%,
+      var(--color-paper) 55%
+    );
+  box-shadow: var(--shadow-pop);
+}
+.gp-account-hero-soft::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 70% 55% at 0% 0%,
+    color-mix(in srgb, var(--color-ink) 3%, transparent),
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.gp-account-inset {
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+  background: color-mix(in srgb, var(--color-paper) 88%, var(--color-surface));
+}
+
+.gp-billing-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 50%, transparent);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-paper) 70%, var(--color-surface));
+}
+@media (min-width: 640px) {
+  .gp-billing-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.gp-billing-stat {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+}
+.gp-billing-stat:nth-child(2n) {
+  border-right: none;
+}
+@media (min-width: 640px) {
+  .gp-billing-stat {
+    border-bottom: none;
+  }
+  .gp-billing-stat:not(:last-child) {
+    border-right: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+  }
+}
+@media (max-width: 639px) {
+  .gp-billing-stat:nth-last-child(-n + 2) {
+    border-bottom: none;
+  }
+}
+
+.gp-history-row {
+  transition: background-color 0.15s ease;
+}
+.gp-history-row:hover {
+  background: color-mix(in srgb, var(--color-surface-2) 65%, transparent);
+}

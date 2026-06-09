@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { buildProActivationScanFields } from '@/lib/scanLimits';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -92,8 +93,10 @@ export async function POST(req: NextRequest) {
             subscriptionStatus: 'active',
             subscriptionStart: start,
             subscriptionEnd: end,
-            paymentProvider: 'razorpay'
-          }
+            subscriptionExpiresAt: end,
+            paymentProvider: 'razorpay',
+            ...buildProActivationScanFields(planType, user.monthlyScanMonth),
+          },
         });
         console.log(`[Razorpay Webhook] Upgraded user ${user.username} (Pro active) via ${event}. Expires: ${end?.toISOString()}`);
         break;

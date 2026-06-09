@@ -6,6 +6,18 @@ export const FREE_SCAN_LIMIT = 2;
 export const PRO_MONTHLY_PLAN_SCAN_LIMIT = 100;
 export const PRO_YEARLY_PLAN_SCAN_LIMIT = 1000;
 
+/**
+ * Scan quota model (two separate counters):
+ *
+ * - `scanCount` — FREE plan only: lifetime scans **consumed** (0–2), not remaining.
+ *   Ignored once the user is on Pro. Kept after upgrade so downgrade cannot bypass
+ *   the free lifetime cap.
+ *
+ * - `monthlyScanCount` + `monthlyScanMonth` — PRO plan only: scans **consumed** in the
+ *   current billing period (YYYY-MM for monthly, YYYY for yearly). Limit comes from
+ *   `getProScanLimit()` (100/month or 1,000/year), not from `scanCount`.
+ */
+
 export type ScanTier = 'free' | 'pro';
 export type ScanPeriodUnit = 'month' | 'year';
 
@@ -70,6 +82,25 @@ export function formatProScanAllowance(subscriptionPlan: string | null | undefin
   return `${PRO_MONTHLY_PLAN_SCAN_LIMIT} scans/month`;
 }
 
+/** Free-tier scans consumed (0–FREE_SCAN_LIMIT). Not used for Pro quota. */
+export function getFreeScansUsed(user: Pick<ScanUsageUser, 'scanCount'>): number {
+  return Math.max(0, user.scanCount);
+}
+
+/**
+ * Seed Pro billing-period scan fields on first activation only.
+ * Does not reset `scanCount` (free lifetime usage is preserved for downgrade).
+ */
+export function buildProActivationScanFields(
+  subscriptionPlan: string | null | undefined,
+  existingPeriodKey: string | null | undefined,
+  now = new Date(),
+): { monthlyScanCount: number; monthlyScanMonth: string } | Record<string, never> {
+  if (existingPeriodKey) return {};
+  const periodKey = getScanPeriodKey(subscriptionPlan, now);
+  return { monthlyScanCount: 0, monthlyScanMonth: periodKey };
+}
+
 export function getScanUsage(user: ScanUsageUser, now = new Date()): ScanUsage {
   if (isProUser(user)) {
     const periodKey = getScanPeriodKey(user.subscriptionPlan, now);
@@ -91,7 +122,7 @@ export function getScanUsage(user: ScanUsageUser, now = new Date()): ScanUsage {
     };
   }
 
-  const used = Math.max(0, user.scanCount);
+  const used = getFreeScansUsed(user);
   const limit = FREE_SCAN_LIMIT;
   const remaining = Math.max(0, limit - used);
 
@@ -134,6 +165,7 @@ export async function reserveProScan(
   const samePeriod = await prisma.user.updateMany({
     where: {
       id: userId,
+      plan: 'PAID',
       monthlyScanMonth: periodKey,
       monthlyScanCount: { lt: limit },
     },
@@ -144,6 +176,7 @@ export async function reserveProScan(
   const newPeriod = await prisma.user.updateMany({
     where: {
       id: userId,
+      plan: 'PAID',
       OR: [{ monthlyScanMonth: null }, { monthlyScanMonth: { not: periodKey } }],
     },
     data: { monthlyScanCount: 1, monthlyScanMonth: periodKey },
@@ -158,7 +191,12 @@ export async function rollbackProScan(
 ): Promise<void> {
   await prisma.user
     .updateMany({
-      where: { id: userId, monthlyScanMonth: periodKey, monthlyScanCount: { gt: 0 } },
+      where: {
+        id: userId,
+        plan: 'PAID',
+        monthlyScanMonth: periodKey,
+        monthlyScanCount: { gt: 0 },
+      },
       data: { monthlyScanCount: { decrement: 1 } },
     })
     .catch((err) => console.error('[Scan Limits] Pro scan rollback failed:', err));

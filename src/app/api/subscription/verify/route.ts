@@ -9,6 +9,7 @@ import {
   readRazorpayConfig,
 } from '@/lib/razorpayServer';
 import type { BillingPlanType } from '@/lib/razorpaySubscriptions';
+import { buildProActivationScanFields } from '@/lib/scanLimits';
 
 export async function POST(req: NextRequest) {
   const limited = rateLimitByIp(req, 'subscription-verify', 10, 60_000);
@@ -127,6 +128,7 @@ export async function POST(req: NextRequest) {
         subscriptionEnd: expiryDate,
         subscriptionExpiresAt: expiryDate,
         paymentProvider: 'razorpay',
+        ...buildProActivationScanFields(planType, user.monthlyScanMonth),
       },
     });
 
