@@ -17,7 +17,7 @@ export const PRICING_SUBLINE =
   "Choose a plan that works for you. No hidden fees — cancel Pro anytime.";
 
 export const RAZORPAY_FOOTER_LINE =
-  "Secure checkout via Razorpay · Pro activates immediately · Cancel anytime";
+  "Pay with credit card or PhonePe · Secure Razorpay checkout · Cancel anytime";
 
 export const PRICING_CARD_BASE =
   "pricing-card pricing-card-layout flex h-full w-full min-w-[min(100%,280px)] flex-shrink-0 snap-center flex-col p-6 sm:p-8 lg:min-w-0";

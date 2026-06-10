@@ -38,14 +38,24 @@ export function mapRazorpayPaymentFailure(error: {
   }
 
   if (
+    lower.includes('debit') ||
+    (lower.includes('card') && lower.includes('not support'))
+  ) {
+    return (
+      'Debit cards are not supported for Pro subscriptions. Use a credit card ' +
+      '(Visa/Mastercard/RuPay credit) or PhonePe UPI.'
+    );
+  }
+
+  if (
     lower.includes('upi') ||
     lower.includes('cancelled the payment') ||
     lower.includes('delay in response') ||
     lower.includes('something went wrong')
   ) {
     return (
-      'UPI subscription setup did not complete. Try again, use UPI QR if available, ' +
-      'or pay with a card that supports recurring mandates.'
+      'PhonePe subscription setup did not complete. On mobile, tap PhonePe and approve in the app. ' +
+      'On desktop, scan the QR with PhonePe. Or pay with a credit card instead.'
     );
   }
 
@@ -61,5 +71,8 @@ export function mapRazorpayPaymentFailure(error: {
 
   if (description.trim()) return description;
 
-  return 'Payment failed. Try a different card that supports recurring payments, or contact support.';
+  return (
+    'Payment failed. Use a credit card or PhonePe UPI. ' +
+    'Debit cards and other UPI apps are not supported for subscriptions.'
+  );
 }

@@ -3,6 +3,40 @@ import { mapRazorpayPaymentFailure } from '@/lib/mapRazorpayPaymentFailure';
 
 export type BillingPlan = "monthly" | "yearly";
 
+/**
+ * Subscription checkout — credit cards + PhonePe UPI only.
+ * Debit cards, GPay, Amazon Pay, and netbanking are hidden (poor mandate success in testing).
+ */
+export const RAZORPAY_SUBSCRIPTION_CHECKOUT_CONFIG = {
+  display: {
+    blocks: {
+      card: {
+        name: "Credit card",
+        instruments: [
+          {
+            method: "card",
+            types: ["credit"],
+          },
+        ],
+      },
+      upi: {
+        name: "PhonePe",
+        instruments: [
+          {
+            method: "upi",
+            apps: ["phonepe"],
+            flows: ["intent", "qr"],
+          },
+        ],
+      },
+    },
+    sequence: ["block.card", "block.upi"],
+    preferences: {
+      show_default_blocks: false,
+    },
+  },
+} as const;
+
 type RazorpayCheckoutInstance = {
   open: () => void;
   on: (event: string, handler: (response: unknown) => void) => void;
@@ -141,6 +175,7 @@ export async function openRazorpayCheckout({
       ...(data.email ? { email: data.email } : {}),
     },
     theme: { color: "#0a0a0a" },
+    config: RAZORPAY_SUBSCRIPTION_CHECKOUT_CONFIG,
   };
 
   const rzp = new window.Razorpay!(options);
