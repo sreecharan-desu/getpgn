@@ -92,6 +92,8 @@ import {
 import { RazorpayLogo } from "@/components/ui/RazorpayLogo";
 import {
   consumePendingUpgrade,
+  formatBillingDate,
+  getDeferredMandateNotice,
   openRazorpayCheckout,
 } from "@/lib/razorpayCheckout";
 import {
@@ -271,6 +273,21 @@ export default function DashboardClient({
   const reduceMotion = useReducedMotion();
 
   const isPro = isProUser(user);
+
+  const deferredResubscribeAt = useMemo(() => {
+    if (
+      !isRealRazorpaySubscription(user) ||
+      user.subscriptionStatus !== "cancelled" ||
+      !user.subscriptionEnd
+    ) {
+      return null;
+    }
+    return new Date(user.subscriptionEnd) > new Date() ? user.subscriptionEnd : null;
+  }, [user]);
+
+  const deferredMandateNotice = deferredResubscribeAt
+    ? getDeferredMandateNotice(deferredResubscribeAt)
+    : null;
 
   const scanUsage = getScanUsage(user);
   const scansExhausted = scanUsage.exhausted;
@@ -2097,9 +2114,7 @@ export default function DashboardClient({
           try {
             if (deferredBilling) {
               const chargeDate = subscriptionStart
-                ? new Date(subscriptionStart).toLocaleDateString("en-US", {
-                    dateStyle: "medium",
-                  })
+                ? formatBillingDate(subscriptionStart)
                 : "your renewal date";
               setUser((prev) => ({
                 ...prev,
@@ -2111,8 +2126,8 @@ export default function DashboardClient({
                 ...(subscriptionEnd ? { subscriptionEnd } : {}),
               }));
               setShowPricingModal(false);
-              toast.success("Renewal scheduled", {
-                description: `First charge on ${chargeDate}. Pro stays on until then.`,
+              toast.success("Autopay set up", {
+                description: `Mandate registered. Your plan payment will auto-debit on ${chargeDate}.`,
               });
             } else {
               setUser((prev) => ({
@@ -2816,17 +2831,12 @@ export default function DashboardClient({
         {user.subscriptionStatus === "authenticated" && user.subscriptionStart && (
           <p className="mt-2 text-[11px] text-muted leading-snug flex items-start gap-1.5">
             <AlertCircle className="w-3.5 h-3.5 text-muted shrink-0 mt-px" />
-            Renewal scheduled — Pro stays on until{" "}
+            Autopay is set up. Pro stays on until{" "}
             {user.subscriptionEnd
-              ? new Date(user.subscriptionEnd).toLocaleDateString("en-US", {
-                  dateStyle: "medium",
-                })
+              ? formatBillingDate(user.subscriptionEnd)
               : "your current period ends"}
-            . First charge on{" "}
-            {new Date(user.subscriptionStart).toLocaleDateString("en-US", {
-              dateStyle: "medium",
-            })}
-            .
+            . Your plan payment will be automatically deducted on{" "}
+            {formatBillingDate(user.subscriptionStart)}.
           </p>
         )}
         {user.subscriptionStatus === "cancelled" && user.subscriptionEnd && (
@@ -2881,7 +2891,10 @@ export default function DashboardClient({
           <div className="mt-2.5 space-y-2">
             <p className="text-[11px] text-muted leading-snug">
               Your subscription won&apos;t renew. Pro stays on until the date
-              above. Resubscribe now — billing starts on that date, not today.
+              above. Resubscribe to set up autopay (₹1 mandate today) — your plan
+              payment will auto-debit on{" "}
+              {user.subscriptionEnd ? formatBillingDate(user.subscriptionEnd) : "that date"}
+              .
             </p>
             <button
               type="button"
@@ -3756,6 +3769,7 @@ export default function DashboardClient({
         isPro={!!isPro}
         billingLoading={billingLoading}
         initialInterval={pricingInitialInterval}
+        mandateNotice={deferredMandateNotice}
         onSelectMonthly={() => handleCreateSubscription("monthly")}
         onSelectYearly={() => handleCreateSubscription("yearly")}
       />

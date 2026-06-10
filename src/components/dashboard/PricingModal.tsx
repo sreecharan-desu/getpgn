@@ -13,6 +13,8 @@ interface PricingModalProps {
   isPro: boolean;
   billingLoading: boolean;
   initialInterval?: "monthly" | "yearly";
+  /** Shown when resubscribing during cancelled grace (mandate-only checkout). */
+  mandateNotice?: string | null;
   onSelectMonthly: () => void;
   onSelectYearly: () => void;
 }
@@ -23,6 +25,7 @@ export function PricingModal({
   scanCount,
   isPro,
   billingLoading,
+  mandateNotice,
   onSelectMonthly,
   onSelectYearly,
 }: PricingModalProps) {
@@ -80,6 +83,14 @@ export function PricingModal({
             <div id="pricing-modal-title" className="sr-only">
               Pricing
             </div>
+            {mandateNotice ? (
+              <div
+                role="status"
+                className="mx-auto mb-4 max-w-xl rounded-xl border border-line bg-surface-2/80 px-4 py-3 text-[12px] leading-relaxed text-muted"
+              >
+                {mandateNotice}
+              </div>
+            ) : null}
             <PricingSectionContent
               presentation="modal"
               checkoutMode

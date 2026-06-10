@@ -3,6 +3,27 @@ import { mapRazorpayPaymentFailure } from '@/lib/mapRazorpayPaymentFailure';
 
 export type BillingPlan = "monthly" | "yearly";
 
+export function formatBillingDate(value: string | Date): string {
+  return new Date(value).toLocaleDateString("en-US", { dateStyle: "medium" });
+}
+
+/** Razorpay checkout subtitle when billing is deferred to period end. */
+export function getDeferredCheckoutDescription(
+  plan: BillingPlan,
+  billingStartsAt: string,
+): string {
+  const date = formatBillingDate(billingStartsAt);
+  const planAmount = plan === "monthly" ? "₹100" : "₹1,000";
+  const cycle = plan === "monthly" ? "month" : "year";
+  return `₹1 mandate today only · ${planAmount}/${cycle} auto-debits on ${date}`;
+}
+
+/** Banner copy before deferred resubscribe checkout. */
+export function getDeferredMandateNotice(billingStartsAt: string): string {
+  const date = formatBillingDate(billingStartsAt);
+  return `You're only setting up autopay today (₹1 mandate). Your plan payment will be automatically deducted on ${date} — not before.`;
+}
+
 /**
  * Subscription checkout — Razorpay's native UPI panel (apps + QR) and cards.
  * Custom UPI blocks with show_default_blocks:false render a broken empty panel;
@@ -121,24 +142,20 @@ export async function openRazorpayCheckout({
     billingStartsAt?: string | null;
   };
 
-  const billingStartLabel =
+  const deferredCheckout =
     data.deferredBilling && data.billingStartsAt
-      ? new Date(data.billingStartsAt).toLocaleDateString("en-US", {
-          dateStyle: "medium",
-        })
+      ? getDeferredCheckoutDescription(plan, data.billingStartsAt)
       : null;
 
   const options = {
     key: data.keyId,
     subscription_id: data.subscription_id,
     name: plan === "monthly" ? "GetPGN Pro Monthly" : "GetPGN Pro Yearly",
-    description: billingStartLabel
-      ? plan === "monthly"
-        ? `₹100/month · first charge on ${billingStartLabel}`
-        : `₹1,000/year · first charge on ${billingStartLabel}`
-      : plan === "monthly"
+    description:
+      deferredCheckout ??
+      (plan === "monthly"
         ? "₹100/month · cancel anytime"
-        : "₹1,000/year · save 17%",
+        : "₹1,000/year · save 17%"),
     handler: async (response: {
       razorpay_payment_id: string;
       razorpay_subscription_id: string;
