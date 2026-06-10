@@ -2809,9 +2809,21 @@ export default function DashboardClient({
           </button>
         )}
         {isRealRazorpaySubscription(user) && user.subscriptionStatus === "cancelled" && (
-          <p className="mt-2 text-[10px] text-muted">
-            To subscribe again, choose a plan from the upgrade options.
-          </p>
+          <div className="mt-2.5 space-y-2">
+            <p className="text-[11px] text-muted leading-snug">
+              Your subscription won&apos;t renew. Pro stays on until the date
+              above — resubscribe anytime to continue after that.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPricingModal(true)}
+              disabled={billingLoading}
+              className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-ink hover:bg-ink/90 text-paper font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Resubscribe
+              <ArrowUpRight className="w-3 h-3" />
+            </button>
+          </div>
         )}
       </div>
       <div className="border-t border-line/60">
