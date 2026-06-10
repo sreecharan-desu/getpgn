@@ -39,6 +39,9 @@ export const PLAN_SPECS: Record<
 /** How long the customer has to complete mandate authorisation at checkout. */
 export const SUBSCRIPTION_AUTH_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 
+/** Upfront mandate auth for deferred resubscribe checkouts (₹1 in paise). */
+export const SUBSCRIPTION_MANDATE_AUTH_PAISE = 100;
+
 /** Reject reusing a pending sub when expire_by is within this many seconds. */
 export const SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS = 10 * 60; // 10 minutes
 
@@ -170,7 +173,18 @@ export function buildSubscriptionCreatePayload(input: {
     customer_notify: true as const,
     expire_by: expireBy,
     ...(deferredStart
-      ? { start_at: Math.floor(deferredStart.getTime() / 1000) }
+      ? {
+          start_at: Math.floor(deferredStart.getTime() / 1000),
+          addons: [
+            {
+              item: {
+                name: 'Mandate authorization',
+                amount: SUBSCRIPTION_MANDATE_AUTH_PAISE,
+                currency: 'INR',
+              },
+            },
+          ],
+        }
       : {}),
     notes: {
       userId,

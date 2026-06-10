@@ -4,34 +4,22 @@ import { mapRazorpayPaymentFailure } from '@/lib/mapRazorpayPaymentFailure';
 export type BillingPlan = "monthly" | "yearly";
 
 /**
- * Subscription checkout — UPI (intent + QR) and credit cards.
- * Debit cards, netbanking, and wallets stay hidden (poor mandate success in testing).
+ * Subscription checkout — Razorpay's native UPI panel (apps + QR) and cards.
+ * Custom UPI blocks with show_default_blocks:false render a broken empty panel;
+ * hide unwanted methods instead of replacing the whole UPI UI.
  */
 export const RAZORPAY_SUBSCRIPTION_CHECKOUT_CONFIG = {
   display: {
-    blocks: {
-      upi: {
-        name: "UPI",
-        instruments: [
-          {
-            method: "upi",
-            flows: ["intent", "qr"],
-          },
-        ],
-      },
-      card: {
-        name: "Credit card",
-        instruments: [
-          {
-            method: "card",
-            types: ["credit"],
-          },
-        ],
-      },
-    },
-    sequence: ["block.upi", "block.card"],
+    hide: [
+      { method: "card", types: ["debit"] },
+      { method: "netbanking" },
+      { method: "wallet" },
+      { method: "emi" },
+      { method: "paylater" },
+    ],
+    sequence: ["upi", "card"],
     preferences: {
-      show_default_blocks: false,
+      show_default_blocks: true,
     },
   },
 } as const;
