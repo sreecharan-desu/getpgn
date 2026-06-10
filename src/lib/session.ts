@@ -4,6 +4,10 @@ import { cookies } from 'next/headers';
 import { prisma } from './db';
 import { userAuthSelect, userSessionSelect } from './dbSelects';
 import { getJwtSecret } from './security';
+import {
+  shouldSyncRazorpaySubscription,
+  syncRazorpaySubscription,
+} from './syncRazorpaySubscription';
 import type { User } from '@prisma/client';
 
 const COOKIE_NAME = 'getpgn_session';
@@ -109,12 +113,23 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   if (!session) return null;
 
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: session.userId },
       select: userSessionSelect,
     });
 
     if (!user) return null;
+
+    if (shouldSyncRazorpaySubscription(user)) {
+      const sync = await syncRazorpaySubscription(user);
+      if (sync.updated) {
+        user =
+          (await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: userSessionSelect,
+          })) ?? user;
+      }
+    }
 
     const normalized = applySubscriptionExpiry(user);
 

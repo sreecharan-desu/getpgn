@@ -17,6 +17,11 @@ export function isProUser(user: ProAccessUser | null | undefined): boolean {
     return false;
   }
 
+  // Full refund — access ends immediately (not at period end).
+  if (user.subscriptionStatus === 'refunded') {
+    return false;
+  }
+
   // 1. Check if the subscription is active
   if (user.subscriptionStatus === 'active') {
     return true;

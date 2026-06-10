@@ -69,6 +69,7 @@ Powered by Next.js 15, Prisma, python-chess validation, and advanced Gemini Mult
    - `RAZORPAY_MONTHLY_PLAN_ID` / `RAZORPAY_YEARLY_PLAN_ID`: Subscription **plan** IDs (must have `period` + `interval` — see below).
    - `RAZORPAY_WEBHOOK_SECRET`: Webhook signing secret for subscription events.
    - Razorpay webhook URL (production): `https://getpgn.com/api/webhooks/razorpay`
+   - Enable webhook events: `subscription.*`, `refund.created`, `refund.processed` (refunds revoke Pro immediately).
 
    **Razorpay plans (required):** Plans must be created as recurring subscription plans with billing cycle:
    - Monthly: `period=monthly`, `interval=1`, amount `10000` paise (₹100)

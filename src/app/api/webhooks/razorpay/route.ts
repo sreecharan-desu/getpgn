@@ -1,7 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { buildProActivationScanFields } from '@/lib/scanLimits';
+import {
+  createRazorpayClient,
+  readRazorpayConfig,
+} from '@/lib/razorpayServer';
+import {
+  findUserIdForRazorpayPayment,
+  revokeProForRefund,
+} from '@/lib/syncRazorpaySubscription';
 import crypto from 'crypto';
+
+function toPaise(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function isFullyRefunded(payment: {
+  amount?: unknown;
+  amount_refunded?: unknown;
+}): boolean {
+  const amount = toPaise(payment.amount);
+  const refunded = toPaise(payment.amount_refunded);
+  return amount > 0 && refunded >= amount;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +64,76 @@ export async function POST(req: NextRequest) {
     if (event === 'payment.authorized') {
       const paymentEntity = payload.payload.payment?.entity;
       console.log(`[Razorpay Webhook] payment.authorized: ID ${paymentEntity?.id}, Amount ${paymentEntity?.amount}, Status ${paymentEntity?.status}`);
+      return NextResponse.json({ received: true });
+    }
+
+    // Refund events — revoke Pro immediately on full refund (not at period end).
+    if (event === 'refund.processed' || event === 'refund.created') {
+      const refundEntity = payload.payload.refund?.entity;
+      const paymentEntity = payload.payload.payment?.entity;
+      const paymentId =
+        refundEntity?.payment_id ?? paymentEntity?.id ?? null;
+
+      if (!paymentId) {
+        console.warn('[Razorpay Webhook] Refund event missing payment id:', event);
+        return NextResponse.json({ received: true });
+      }
+
+      const subscriptionId =
+        paymentEntity?.subscription_id ??
+        (paymentEntity as { notes?: { subscription_id?: string } })?.notes
+          ?.subscription_id ??
+        null;
+
+      const userId = await findUserIdForRazorpayPayment(paymentId, subscriptionId);
+      if (!userId) {
+        console.error(
+          `[Razorpay Webhook] User not found for refund on payment ${paymentId}`,
+        );
+        return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+      }
+
+      if (user.subscriptionStatus === 'refunded') {
+        console.log(`[Razorpay Webhook] Duplicate refund event for user ${user.username}.`);
+        return NextResponse.json({ received: true });
+      }
+
+      let shouldRevoke = false;
+      const refundAmount = refundEntity?.amount ?? 0;
+
+      const razorpayEnv = readRazorpayConfig();
+      if (razorpayEnv.ok) {
+        const razorpay = createRazorpayClient(razorpayEnv.config);
+        try {
+          const payment = await razorpay.payments.fetch(paymentId);
+          shouldRevoke = isFullyRefunded(payment);
+        } catch (err) {
+          console.warn('[Razorpay Webhook] Could not fetch payment for refund check:', err);
+        }
+      }
+
+      if (!shouldRevoke && paymentEntity && refundAmount > 0) {
+        const paymentAmount = paymentEntity.amount ?? 0;
+        const totalRefunded = paymentEntity.amount_refunded ?? refundAmount;
+        shouldRevoke = paymentAmount > 0 && totalRefunded >= paymentAmount;
+      }
+
+      if (shouldRevoke) {
+        await revokeProForRefund(userId);
+        console.log(
+          `[Razorpay Webhook] Revoked Pro for ${user.username} after ${event} on ${paymentId}.`,
+        );
+      } else {
+        console.log(
+          `[Razorpay Webhook] Refund ${refundEntity?.id ?? 'n/a'} on ${paymentId} is partial or pending — Pro unchanged.`,
+        );
+      }
+
       return NextResponse.json({ received: true });
     }
 
