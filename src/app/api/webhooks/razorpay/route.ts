@@ -9,6 +9,7 @@ import {
   findUserIdForRazorpayPayment,
   revokeProForRefund,
 } from '@/lib/syncRazorpaySubscription';
+import { isBillingDeferred } from '@/lib/razorpaySubscriptions';
 import crypto from 'crypto';
 
 function toPaise(value: unknown): number {
@@ -165,36 +166,72 @@ export async function POST(req: NextRequest) {
     const end = subscriptionEntity.current_end ? new Date(subscriptionEntity.current_end * 1000) : null;
     const planType = subscriptionEntity.notes?.planType || user.subscriptionPlan || 'monthly';
 
+    const activatePro = async (source: string) => {
+      if (
+        user.subscriptionStatus === 'active' &&
+        user.subscriptionEnd &&
+        end &&
+        user.subscriptionEnd.getTime() === end.getTime()
+      ) {
+        console.log(`[Razorpay Webhook] Duplicate ${source} event. User is already active for this period. Skipping update.`);
+        return;
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          plan: 'PAID',
+          subscriptionId: subscriptionId,
+          subscriptionPlan: planType,
+          subscriptionStatus: 'active',
+          subscriptionStart: start,
+          subscriptionEnd: end,
+          subscriptionExpiresAt: end,
+          paymentProvider: 'razorpay',
+          ...buildProActivationScanFields(planType, user.monthlyScanMonth),
+        },
+      });
+      console.log(`[Razorpay Webhook] Upgraded user ${user.username} (Pro active) via ${source}. Expires: ${end?.toISOString()}`);
+    };
+
     switch (event) {
-      case 'subscription.authenticated':
-      case 'subscription.activated':
-      case 'subscription.charged': {
-        // Prevent duplicate updates
-        if (
-          user.subscriptionStatus === 'active' &&
-          user.subscriptionEnd &&
-          end &&
-          user.subscriptionEnd.getTime() === end.getTime()
-        ) {
-          console.log(`[Razorpay Webhook] Duplicate ${event} event. User is already active for this period. Skipping update.`);
+      case 'subscription.authenticated': {
+        if (isBillingDeferred(subscriptionEntity)) {
+          const billingStart = subscriptionEntity.start_at
+            ? new Date(subscriptionEntity.start_at * 1000)
+            : start;
+          const graceEnd =
+            user.subscriptionEnd && user.subscriptionEnd > new Date()
+              ? user.subscriptionEnd
+              : end;
+
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              plan: 'PAID',
+              subscriptionId: subscriptionId,
+              subscriptionPlan: planType,
+              subscriptionStatus: 'authenticated',
+              subscriptionStart: billingStart,
+              ...(graceEnd
+                ? { subscriptionEnd: graceEnd, subscriptionExpiresAt: graceEnd }
+                : {}),
+              paymentProvider: 'razorpay',
+            },
+          });
+          console.log(
+            `[Razorpay Webhook] User ${user.username} mandate authorised; billing starts ${billingStart?.toISOString()}.`,
+          );
           break;
         }
 
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            plan: 'PAID',
-            subscriptionId: subscriptionId,
-            subscriptionPlan: planType,
-            subscriptionStatus: 'active',
-            subscriptionStart: start,
-            subscriptionEnd: end,
-            subscriptionExpiresAt: end,
-            paymentProvider: 'razorpay',
-            ...buildProActivationScanFields(planType, user.monthlyScanMonth),
-          },
-        });
-        console.log(`[Razorpay Webhook] Upgraded user ${user.username} (Pro active) via ${event}. Expires: ${end?.toISOString()}`);
+        await activatePro(event);
+        break;
+      }
+
+      case 'subscription.activated':
+      case 'subscription.charged': {
+        await activatePro(event);
         break;
       }
 

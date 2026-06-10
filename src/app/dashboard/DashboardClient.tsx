@@ -2085,24 +2085,54 @@ export default function DashboardClient({
       await openRazorpayCheckout({
         plan,
         username: user.username,
-        onVerified: async ({ plan: verifiedPlan, subscriptionId }) => {
+        onVerified: async ({
+          plan: verifiedPlan,
+          subscriptionId,
+          deferredBilling,
+          subscriptionStatus,
+          subscriptionStart,
+          subscriptionEnd,
+        }) => {
           setBillingLoading(true);
           try {
-            setUser((prev) => ({
-              ...prev,
-              plan: "PAID",
-              subscriptionStatus: "active",
-              subscriptionPlan: verifiedPlan,
-              subscriptionId,
-              ...buildProActivationScanFields(
-                verifiedPlan,
-                prev.monthlyScanMonth,
-              ),
-            }));
-            setShowPricingModal(false);
-            toast.success("Welcome to GetPGN Pro", {
-              description: `Pro is active instantly. ${formatProScanAllowance(verifiedPlan)}.`,
-            });
+            if (deferredBilling) {
+              const chargeDate = subscriptionStart
+                ? new Date(subscriptionStart).toLocaleDateString("en-US", {
+                    dateStyle: "medium",
+                  })
+                : "your renewal date";
+              setUser((prev) => ({
+                ...prev,
+                plan: "PAID",
+                subscriptionStatus: subscriptionStatus ?? "authenticated",
+                subscriptionPlan: verifiedPlan,
+                subscriptionId,
+                ...(subscriptionStart ? { subscriptionStart } : {}),
+                ...(subscriptionEnd ? { subscriptionEnd } : {}),
+              }));
+              setShowPricingModal(false);
+              toast.success("Renewal scheduled", {
+                description: `First charge on ${chargeDate}. Pro stays on until then.`,
+              });
+            } else {
+              setUser((prev) => ({
+                ...prev,
+                plan: "PAID",
+                subscriptionStatus: subscriptionStatus ?? "active",
+                subscriptionPlan: verifiedPlan,
+                subscriptionId,
+                ...(subscriptionStart ? { subscriptionStart } : {}),
+                ...(subscriptionEnd ? { subscriptionEnd } : {}),
+                ...buildProActivationScanFields(
+                  verifiedPlan,
+                  prev.monthlyScanMonth,
+                ),
+              }));
+              setShowPricingModal(false);
+              toast.success("Welcome to GetPGN Pro", {
+                description: `Pro is active instantly. ${formatProScanAllowance(verifiedPlan)}.`,
+              });
+            }
             router.refresh();
           } finally {
             setBillingLoading(false);
@@ -2704,7 +2734,9 @@ export default function DashboardClient({
                   user.subscriptionStatus === "cancelled" ||
                   user.subscriptionStatus === "paused"
                     ? "text-warn"
-                    : ""
+                    : user.subscriptionStatus === "authenticated"
+                      ? "text-muted"
+                      : ""
                 }`}
               >
                 <span
@@ -2712,11 +2744,15 @@ export default function DashboardClient({
                     user.subscriptionStatus === "cancelled" ||
                     user.subscriptionStatus === "paused"
                       ? "bg-warn"
-                      : "bg-positive"
+                      : user.subscriptionStatus === "authenticated"
+                        ? "bg-muted-2"
+                        : "bg-positive"
                   }`}
                 />
                 <span className="capitalize">
-                  {user.subscriptionStatus || "active"}
+                  {user.subscriptionStatus === "authenticated"
+                    ? "Scheduled"
+                    : user.subscriptionStatus || "active"}
                 </span>
               </span>
             </dd>
@@ -2738,10 +2774,27 @@ export default function DashboardClient({
               <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
                 {user.subscriptionStatus === "cancelled"
                   ? "Access until"
-                  : "Renews on"}
+                  : user.subscriptionStatus === "authenticated"
+                    ? "First charge"
+                    : "Renews on"}
               </dt>
               <dd className="font-semibold text-ink gp-nums mt-1">
-                {new Date(user.subscriptionEnd).toLocaleDateString("en-US", {
+                {new Date(
+                  user.subscriptionStatus === "authenticated" && user.subscriptionStart
+                    ? user.subscriptionStart
+                    : user.subscriptionEnd,
+                ).toLocaleDateString("en-US", {
+                  dateStyle: "medium",
+                })}
+              </dd>
+            </div>
+          ) : user.subscriptionStatus === "authenticated" && user.subscriptionStart ? (
+            <div className="gp-billing-stat">
+              <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
+                First charge
+              </dt>
+              <dd className="font-semibold text-ink gp-nums mt-1">
+                {new Date(user.subscriptionStart).toLocaleDateString("en-US", {
                   dateStyle: "medium",
                 })}
               </dd>
@@ -2758,6 +2811,22 @@ export default function DashboardClient({
         {isRealRazorpaySubscription(user) && (
           <p className="mt-2 text-[10px] font-mono text-muted truncate">
             {user.subscriptionId}
+          </p>
+        )}
+        {user.subscriptionStatus === "authenticated" && user.subscriptionStart && (
+          <p className="mt-2 text-[11px] text-muted leading-snug flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 text-muted shrink-0 mt-px" />
+            Renewal scheduled — Pro stays on until{" "}
+            {user.subscriptionEnd
+              ? new Date(user.subscriptionEnd).toLocaleDateString("en-US", {
+                  dateStyle: "medium",
+                })
+              : "your current period ends"}
+            . First charge on{" "}
+            {new Date(user.subscriptionStart).toLocaleDateString("en-US", {
+              dateStyle: "medium",
+            })}
+            .
           </p>
         )}
         {user.subscriptionStatus === "cancelled" && user.subscriptionEnd && (
@@ -2812,7 +2881,7 @@ export default function DashboardClient({
           <div className="mt-2.5 space-y-2">
             <p className="text-[11px] text-muted leading-snug">
               Your subscription won&apos;t renew. Pro stays on until the date
-              above — resubscribe anytime to continue after that.
+              above. Resubscribe now — billing starts on that date, not today.
             </p>
             <button
               type="button"

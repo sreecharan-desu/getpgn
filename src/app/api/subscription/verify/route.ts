@@ -8,7 +8,10 @@ import {
   createRazorpayClient,
   readRazorpayConfig,
 } from '@/lib/razorpayServer';
-import type { BillingPlanType } from '@/lib/razorpaySubscriptions';
+import {
+  isBillingDeferred,
+  type BillingPlanType,
+} from '@/lib/razorpaySubscriptions';
 import { buildProActivationScanFields } from '@/lib/scanLimits';
 
 export async function POST(req: NextRequest) {
@@ -89,15 +92,19 @@ export async function POST(req: NextRequest) {
 
     const planType: BillingPlanType = notes.planType === 'yearly' ? 'yearly' : 'monthly';
     const now = new Date();
+    const deferred = isBillingDeferred(subscription, now);
     const periodEndSec =
       subscription.current_end ??
       subscription.end_at ??
       null;
-    const expiryDate = periodEndSec
-      ? new Date(periodEndSec * 1000)
-      : new Date(now.getTime() + (planType === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000);
+    const fallbackExpiry = new Date(
+      now.getTime() + (planType === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000,
+    );
+    const expiryDate = periodEndSec ? new Date(periodEndSec * 1000) : fallbackExpiry;
     const periodStartSec = subscription.current_start ?? subscription.start_at ?? null;
     const subscriptionStart = periodStartSec ? new Date(periodStartSec * 1000) : now;
+    const graceEnd =
+      user.subscriptionEnd && user.subscriptionEnd > now ? user.subscriptionEnd : null;
 
     if (!existingPayment) {
       try {
@@ -119,28 +126,44 @@ export async function POST(req: NextRequest) {
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
-      data: {
-        plan: 'PAID',
-        subscriptionId: razorpay_subscription_id,
-        subscriptionPlan: planType,
-        subscriptionStatus: 'active',
-        subscriptionStart,
-        subscriptionEnd: expiryDate,
-        subscriptionExpiresAt: expiryDate,
-        paymentProvider: 'razorpay',
-        ...buildProActivationScanFields(planType, user.monthlyScanMonth),
-      },
+      data: deferred
+        ? {
+            plan: 'PAID',
+            subscriptionId: razorpay_subscription_id,
+            subscriptionPlan: planType,
+            subscriptionStatus: 'authenticated',
+            subscriptionStart,
+            subscriptionEnd: graceEnd ?? expiryDate,
+            subscriptionExpiresAt: graceEnd ?? expiryDate,
+            paymentProvider: 'razorpay',
+          }
+        : {
+            plan: 'PAID',
+            subscriptionId: razorpay_subscription_id,
+            subscriptionPlan: planType,
+            subscriptionStatus: 'active',
+            subscriptionStart,
+            subscriptionEnd: expiryDate,
+            subscriptionExpiresAt: expiryDate,
+            paymentProvider: 'razorpay',
+            ...buildProActivationScanFields(planType, user.monthlyScanMonth),
+          },
     });
 
     console.log(
-      `[Verify Subscription] User ${user.username} upgraded to Pro (${planType}). Expires: ${expiryDate.toISOString()}`,
+      deferred
+        ? `[Verify Subscription] User ${user.username} scheduled Pro (${planType}). First charge: ${subscriptionStart.toISOString()}`
+        : `[Verify Subscription] User ${user.username} upgraded to Pro (${planType}). Expires: ${expiryDate.toISOString()}`,
     );
 
     return NextResponse.json({
       success: true,
+      deferredBilling: deferred,
       user: {
         plan: updatedUser.plan,
         subscriptionStatus: updatedUser.subscriptionStatus,
+        subscriptionStart: updatedUser.subscriptionStart?.toISOString() ?? null,
+        subscriptionEnd: updatedUser.subscriptionEnd?.toISOString() ?? null,
       },
     });
   } catch (error) {

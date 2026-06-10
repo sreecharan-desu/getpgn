@@ -118,31 +118,65 @@ export async function fetchAndValidatePlan(
   return plan;
 }
 
+/** When a cancelled user still has Pro until period end, defer the new mandate to that date. */
+export function getDeferredBillingStart(user: {
+  subscriptionStatus?: string | null;
+  subscriptionEnd?: Date | null;
+  now?: Date;
+}): Date | undefined {
+  const now = user.now ?? new Date();
+  if (
+    user.subscriptionStatus === 'cancelled' &&
+    user.subscriptionEnd &&
+    user.subscriptionEnd > now
+  ) {
+    return user.subscriptionEnd;
+  }
+  return undefined;
+}
+
+export function isBillingDeferred(
+  subscription: { start_at?: number | null; current_start?: number | null },
+  now = new Date(),
+): boolean {
+  const startSec = subscription.start_at ?? subscription.current_start;
+  if (!startSec) return false;
+  return startSec * 1000 > now.getTime() + 60_000;
+}
+
 export function buildSubscriptionCreatePayload(input: {
   planId: string;
   planType: BillingPlanType;
   userId: string;
   userEmail?: string | null;
+  billingStartsAt?: Date;
   now?: Date;
 }) {
-  const { planId, planType, userId, userEmail, now = new Date() } = input;
+  const { planId, planType, userId, userEmail, billingStartsAt, now = new Date() } = input;
   const spec = PLAN_SPECS[planType];
   const nowSec = Math.floor(now.getTime() / 1000);
   const expireBy = nowSec + SUBSCRIPTION_AUTH_EXPIRY_SECONDS;
+  const deferredStart =
+    billingStartsAt && billingStartsAt > now ? billingStartsAt : undefined;
 
-  // Do NOT set start_at — Razorpay starts billing immediately after successful auth.
-  // Setting start_at in the future wrongly shifts "Next Due" (e.g. +24h) before payment.
-  // expire_by bounds how long the customer has to finish mandate authorisation at checkout.
+  // Immediate checkout: no start_at — Razorpay bills right after mandate auth.
+  // Resubscribe during cancelled grace: start_at = old period end so the first
+  // charge lands on the next cycle, not today.
+  // expire_by bounds how long the customer has to finish mandate authorisation.
   return {
     plan_id: planId,
     total_count: spec.totalCount,
     quantity: 1,
     customer_notify: true as const,
     expire_by: expireBy,
+    ...(deferredStart
+      ? { start_at: Math.floor(deferredStart.getTime() / 1000) }
+      : {}),
     notes: {
       userId,
       planType,
       ...(userEmail ? { userEmail } : {}),
+      ...(deferredStart ? { deferredBilling: 'true' } : {}),
     },
   };
 }
@@ -219,16 +253,23 @@ export async function findReusablePendingSubscription(
   userId: string,
   planType: BillingPlanType,
   planId: string,
+  expectedStartAtSec?: number | null,
   nowSec = Math.floor(Date.now() / 1000),
 ): Promise<RazorpaySubscriptionEntity | null> {
   try {
     const list = (await razorpay.subscriptions.all({ count: 100 })) as unknown as RazorpaySubscriptionsList;
     const match = (list.items ?? []).find((sub) => {
       const notes = (sub as { notes?: Record<string, string> }).notes;
+      const subStartAt = sub.start_at ?? null;
+      const deferredMatches =
+        expectedStartAtSec != null
+          ? subStartAt === expectedStartAtSec
+          : subStartAt == null || subStartAt > nowSec + SUBSCRIPTION_AUTH_MIN_REMAINING_SECONDS;
       return (
         sub.plan_id === planId &&
         notes?.userId === userId &&
         notes?.planType === planType &&
+        deferredMatches &&
         canCompleteSubscriptionAuth(sub, nowSec)
       );
     });

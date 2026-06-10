@@ -27,8 +27,16 @@ export function isProUser(user: ProAccessUser | null | undefined): boolean {
     return true;
   }
 
+  const periodEnd = user.subscriptionEnd ? new Date(user.subscriptionEnd) : null;
+  const hasRemainingPeriod = Boolean(periodEnd && periodEnd > new Date());
+
+  // Mandate authorised; first charge scheduled for a future date (resubscribe during grace).
+  if (user.subscriptionStatus === 'authenticated' && hasRemainingPeriod) {
+    return true;
+  }
+
   // 2. If the user cancelled but their subscription billing period hasn't ended yet
-  if (user.subscriptionStatus === 'cancelled' && user.subscriptionEnd && new Date(user.subscriptionEnd) > new Date()) {
+  if (user.subscriptionStatus === 'cancelled' && hasRemainingPeriod) {
     return true;
   }
 

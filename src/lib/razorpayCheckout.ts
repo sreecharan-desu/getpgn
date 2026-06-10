@@ -4,12 +4,21 @@ import { mapRazorpayPaymentFailure } from '@/lib/mapRazorpayPaymentFailure';
 export type BillingPlan = "monthly" | "yearly";
 
 /**
- * Subscription checkout — credit cards + PhonePe UPI only.
- * Debit cards, GPay, Amazon Pay, and netbanking are hidden (poor mandate success in testing).
+ * Subscription checkout — UPI (intent + QR) and credit cards.
+ * Debit cards, netbanking, and wallets stay hidden (poor mandate success in testing).
  */
 export const RAZORPAY_SUBSCRIPTION_CHECKOUT_CONFIG = {
   display: {
     blocks: {
+      upi: {
+        name: "UPI",
+        instruments: [
+          {
+            method: "upi",
+            flows: ["intent", "qr"],
+          },
+        ],
+      },
       card: {
         name: "Credit card",
         instruments: [
@@ -19,18 +28,8 @@ export const RAZORPAY_SUBSCRIPTION_CHECKOUT_CONFIG = {
           },
         ],
       },
-      upi: {
-        name: "PhonePe",
-        instruments: [
-          {
-            method: "upi",
-            apps: ["phonepe"],
-            flows: ["intent", "qr"],
-          },
-        ],
-      },
     },
-    sequence: ["block.card", "block.upi"],
+    sequence: ["block.upi", "block.card"],
     preferences: {
       show_default_blocks: false,
     },
@@ -93,6 +92,10 @@ interface OpenCheckoutOptions {
   onVerified: (payload: {
     plan: BillingPlan;
     subscriptionId: string;
+    deferredBilling?: boolean;
+    subscriptionStatus?: string;
+    subscriptionStart?: string | null;
+    subscriptionEnd?: string | null;
   }) => void | Promise<void>;
   onError: (message: string) => void;
 }
@@ -126,14 +129,28 @@ export async function openRazorpayCheckout({
     subscription_id: string;
     username?: string;
     email?: string;
+    deferredBilling?: boolean;
+    billingStartsAt?: string | null;
   };
+
+  const billingStartLabel =
+    data.deferredBilling && data.billingStartsAt
+      ? new Date(data.billingStartsAt).toLocaleDateString("en-US", {
+          dateStyle: "medium",
+        })
+      : null;
 
   const options = {
     key: data.keyId,
     subscription_id: data.subscription_id,
     name: plan === "monthly" ? "GetPGN Pro Monthly" : "GetPGN Pro Yearly",
-    description:
-      plan === "monthly" ? "₹100/month · cancel anytime" : "₹1,000/year · save 17%",
+    description: billingStartLabel
+      ? plan === "monthly"
+        ? `₹100/month · first charge on ${billingStartLabel}`
+        : `₹1,000/year · first charge on ${billingStartLabel}`
+      : plan === "monthly"
+        ? "₹100/month · cancel anytime"
+        : "₹1,000/year · save 17%",
     handler: async (response: {
       razorpay_payment_id: string;
       razorpay_subscription_id: string;
@@ -162,9 +179,22 @@ export async function openRazorpayCheckout({
           return;
         }
 
+        const verifyData = (await verifyRes.json()) as {
+          deferredBilling?: boolean;
+          user?: {
+            subscriptionStatus?: string;
+            subscriptionStart?: string | null;
+            subscriptionEnd?: string | null;
+          };
+        };
+
         await onVerified({
           plan,
           subscriptionId: response.razorpay_subscription_id,
+          deferredBilling: verifyData.deferredBilling,
+          subscriptionStatus: verifyData.user?.subscriptionStatus,
+          subscriptionStart: verifyData.user?.subscriptionStart,
+          subscriptionEnd: verifyData.user?.subscriptionEnd,
         });
       } catch {
         onError("We couldn't confirm your payment. Please try again.");

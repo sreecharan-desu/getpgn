@@ -14,6 +14,7 @@ import {
   canCompleteSubscriptionAuth,
   fetchAndValidatePlan,
   findReusablePendingSubscription,
+  getDeferredBillingStart,
   RazorpayPlanConfigError,
   type BillingPlanType,
 } from '@/lib/razorpaySubscriptions';
@@ -50,11 +51,17 @@ export async function POST(req: NextRequest) {
 
     await fetchAndValidatePlan(razorpay, planId, planType);
 
+    const billingStartsAt = getDeferredBillingStart(user);
+    const expectedStartAtSec = billingStartsAt
+      ? Math.floor(billingStartsAt.getTime() / 1000)
+      : null;
+
     const reusable = await findReusablePendingSubscription(
       razorpay,
       user.id,
       planType,
       planId,
+      expectedStartAtSec,
     );
 
     let subscription;
@@ -63,6 +70,7 @@ export async function POST(req: NextRequest) {
       planType,
       userId: user.id,
       userEmail: user.email,
+      billingStartsAt,
     });
 
     if (reusable?.id) {
@@ -136,6 +144,8 @@ export async function POST(req: NextRequest) {
       username: user.username,
       email: user.email ?? undefined,
       plan: planType,
+      deferredBilling: Boolean(billingStartsAt),
+      billingStartsAt: billingStartsAt?.toISOString() ?? null,
     });
   } catch (error) {
     if (error instanceof RazorpayPlanConfigError) {
