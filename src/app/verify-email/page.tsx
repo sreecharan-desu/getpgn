@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation';
-import { getAuthenticatedRedirectPath, getCurrentUser } from '@/lib/session';
+import { getCurrentUser, getPostAuthRedirectPath } from '@/lib/session';
+import { verifyEmailMetadata } from '@/lib/og/pages';
 import VerifyEmailClient from './VerifyEmailClient';
 
 export const dynamic = 'force-dynamic';
+export const metadata = verifyEmailMetadata();
 
 export default async function VerifyEmailPage({
   searchParams,
@@ -11,19 +13,26 @@ export default async function VerifyEmailPage({
 }) {
   const user = await getCurrentUser();
   const params = await searchParams;
-
-  if (user?.emailVerified) {
-    redirect('/dashboard');
-  }
-
-  const emailFromQuery = params.email?.trim() ?? '';
   const hasToken = Boolean(params.token);
 
-  if (!user && !emailFromQuery && !hasToken) {
+  if (user) {
+    if (!user.email) {
+      redirect('/signup/email');
+    }
+    if (user.emailVerified) {
+      redirect(getPostAuthRedirectPath(user));
+    }
+  } else if (!hasToken) {
     redirect('/login');
   }
 
+  const emailFromQuery = params.email?.trim() ?? '';
+
   return (
-    <VerifyEmailClient initialEmail={user?.email ?? emailFromQuery} initialCooldownSeconds={null} />
+    <VerifyEmailClient
+      initialEmail={user?.email ?? emailFromQuery}
+      initialCooldownSeconds={null}
+      lockEmail={Boolean(user?.email)}
+    />
   );
 }

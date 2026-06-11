@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { StatusShell } from "@/components/ui/StatusShell";
+import { LogoMessageShell } from "@/components/ui/LogoMessageShell";
 
 export default function NotFound() {
   return (
-    <StatusShell
+    <LogoMessageShell
       eyebrow="404"
       title="This page isn't on the board"
       subtitle="The link may be broken, or the page may have been moved. Head home or open your dashboard to keep playing."

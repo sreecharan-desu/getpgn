@@ -161,30 +161,6 @@ export function SkeletonAnalyzeElsewhere() {
   );
 }
 
-/** Game snapshot sidebar card. */
-export function SkeletonGameSnapshot() {
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Skeleton width={14} height={14} rounded="sm" />
-        <Skeleton height={10} width={96} rounded="sm" />
-      </div>
-      <Skeleton height={14} width="75%" rounded="sm" className="mb-3" />
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="mb-2 flex items-center justify-between gap-3">
-          <Skeleton height={12} width={56} rounded="sm" />
-          <Skeleton height={12} width={32} rounded="sm" />
-        </div>
-      ))}
-      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line pt-3">
-        <SkeletonBadge width={56} />
-        <SkeletonBadge width={64} />
-        <SkeletonBadge width={72} />
-      </div>
-    </div>
-  );
-}
-
 /** Saved games sidebar panel. */
 export function SkeletonSavedGamesPanel() {
   return (
@@ -208,12 +184,11 @@ export function SkeletonSavedGamesPanel() {
 /** Full sidebar while session restores. */
 export function SidebarRestoreSkeleton() {
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-3 self-start lg:sticky lg:top-[88px]">
+    <div className="flex w-72 shrink-0 flex-col gap-3 self-stretch overflow-hidden lg:sticky lg:top-[88px] lg:min-h-0 lg:flex-1">
       <SkeletonSavedGamesPanel />
       <SkeletonSharePanel />
       <SkeletonButton width="100%" />
       <SkeletonAnalyzeElsewhere />
-      <SkeletonGameSnapshot />
     </div>
   );
 }

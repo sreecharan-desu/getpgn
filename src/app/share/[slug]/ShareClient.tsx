@@ -1,15 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChessBoard, BoardThemePicker, useBoardTheme } from '@/components/ChessBoard';
 import { MoveList, Turn } from '@/components/MoveList';
 import { ExportPanel } from '@/components/ExportPanel';
 import { MobileShareBar } from '@/components/MobileShareBar';
+import { BoardPlayerRail } from '@/components/dashboard/BoardPlayerRail';
+import { ReplayControls } from '@/components/ReplayControls';
 import { Logo } from '@/components/ui/Logo';
 import { SoundToggle } from '@/components/ui/SoundToggle';
 import { useChessPlySounds } from '@/hooks/useChessPlySounds';
-import { Link2, ArrowUpRight, RotateCw, Check } from 'lucide-react';
+import { useReplayPlayback } from '@/hooks/useReplayPlayback';
+import { Link2, ArrowUpRight, ArrowLeftRight, Check } from 'lucide-react';
+import { SiLichess, SiChessdotcom } from 'react-icons/si';
 import { applyThemePreference, getStoredThemePreference } from '@/lib/theme';
 import {
   START_FEN,
@@ -18,10 +22,6 @@ import {
   getCheckPlyForDisplay,
 } from '@/lib/board-position';
 
-// Older saved games may contain a duplicate header block and/or ugly all-`?`
-// placeholder tags. Keep only the first contiguous run of [...] tag lines as
-// the header, drop pure-placeholder tags, emit a real Date from createdAt, and
-// append the movetext as a single clean line.
 function cleanPgn(raw: string, createdAt?: string): string {
   const lines = (raw ?? '').split('\n');
   const header: string[] = [];
@@ -46,12 +46,10 @@ function cleanPgn(raw: string, createdAt?: string): string {
         const tag = match?.[1];
         const value = match?.[2] ?? '';
 
-        // Drop pure-placeholder tags (e.g. Round/White/Black "?").
         if (value === '?') {
           seenHeader = true;
           continue;
         }
-        // Replace placeholder/real Date with one derived from createdAt.
         if (tag === 'Date') {
           if (realDate) header.push(`[Date "${realDate}"]`);
           else if (value !== '????.??.??') header.push(trimmed);
@@ -61,25 +59,18 @@ function cleanPgn(raw: string, createdAt?: string): string {
         header.push(trimmed);
         seenHeader = true;
       }
-      // subsequent tag lines (duplicate header blocks) are dropped
       continue;
     }
-    // first non-tag line after a header run closes the header block
     if (seenHeader) headerDone = true;
     movetext.push(line);
   }
 
   const headerBlock = header.join('\n');
-  // Collapse chess.js's ~80-column hard wraps in the movetext into single
-  // spaces so each move number stays with its replies. Tokens are preserved
-  // exactly (including the trailing result token like *, 1-0, 0-1, 1/2-1/2).
   const moves = movetext.join(' ').replace(/\s+/g, ' ').trim();
   if (!headerBlock) return moves;
   return moves ? `${headerBlock}\n\n${moves}` : headerBlock;
 }
 
-// Deterministic, locale- and timezone-independent date formatting so the
-// server-rendered HTML always matches the client (avoids hydration mismatch).
 const SHARE_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function formatSharedDate(iso: string): string {
   const d = new Date(iso);
@@ -87,14 +78,32 @@ function formatSharedDate(iso: string): string {
   return `${d.getUTCDate()} ${SHARE_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+function normalizePlayerLabel(
+  value: string | undefined | null,
+  fallback: 'Player 1' | 'Player 2',
+) {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === 'White' || trimmed === 'Black') return fallback;
+  return trimmed;
+}
+
 interface ShareClientProps {
   title: string;
+  whitePlayer: string;
+  blackPlayer: string;
   pgn: string;
   movesJson: string;
   createdAt: string;
 }
 
-export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareClientProps) {
+export default function ShareClient({
+  title,
+  whitePlayer,
+  blackPlayer,
+  pgn,
+  movesJson,
+  createdAt,
+}: ShareClientProps) {
   const turns: Turn[] = JSON.parse(movesJson);
   const cleanedPgn = cleanPgn(pgn, createdAt);
   const downloadFileName = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'game'}.pgn`;
@@ -102,8 +111,35 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
   useChessPlySounds(turns, currentPlyIndex, turns.length > 0);
   const [boardOrientation, setBoardOrientation] = useState<'white' | 'black'>('white');
   const [boardTheme, setBoardTheme] = useBoardTheme(true);
-  const boardCardRef = useRef<HTMLDivElement>(null);
-  const [boardCardHeight, setBoardCardHeight] = useState<number | null>(null);
+
+  const displayWhite = useMemo(
+    () => normalizePlayerLabel(whitePlayer, 'Player 1'),
+    [whitePlayer],
+  );
+  const displayBlack = useMemo(
+    () => normalizePlayerLabel(blackPlayer, 'Player 2'),
+    [blackPlayer],
+  );
+  const boardTopPlayer =
+    boardOrientation === 'white' ? displayBlack : displayWhite;
+  const boardBottomPlayer =
+    boardOrientation === 'white' ? displayWhite : displayBlack;
+
+  const totalReplayPlies = useMemo(
+    () =>
+      turns.reduce(
+        (count, turn) =>
+          count + (turn.white?.san ? 1 : 0) + (turn.black?.san ? 1 : 0),
+        0,
+      ),
+    [turns],
+  );
+
+  const replayPlayback = useReplayPlayback({
+    currentPlyIndex,
+    totalPlies: totalReplayPlies,
+    onSelectPly: setCurrentPlyIndex,
+  });
 
   useEffect(() => {
     const syncTheme = () => {
@@ -117,18 +153,6 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
     media.addEventListener('change', onSystemThemeChange);
     return () => media.removeEventListener('change', onSystemThemeChange);
   }, []);
-
-  useLayoutEffect(() => {
-    const el = boardCardRef.current;
-    if (!el) return;
-    const update = () => setBoardCardHeight(el.offsetHeight);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [currentPlyIndex, boardOrientation, turns.length]);
-
-  const totalPlies = turns.length * 2;
 
   const findKingSquare = (fen: string, color: 'w' | 'b'): string | null => {
     const boardPart = fen.split(' ')[0];
@@ -161,8 +185,14 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
     const isCheckmate = ply.san!.endsWith('#');
     const isCheck = ply.san!.endsWith('+');
     if (isCheckmate || isCheck) {
-      const kingSq = findKingSquare(getBoardFen(), player === 'white' ? 'b' : 'w');
-      if (kingSq) return { square: kingSq, type: isCheckmate ? ('checkmate' as const) : ('check' as const) };
+      const checkedColor = player === 'white' ? 'b' : 'w';
+      const kingSq = findKingSquare(getBoardFen(), checkedColor);
+      if (kingSq) {
+        return {
+          square: kingSq,
+          type: isCheckmate ? ('checkmate' as const) : ('check' as const),
+        };
+      }
     }
     return null;
   };
@@ -176,14 +206,13 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
     const positionLabel =
       currentPlyIndex === 0
         ? 'Start position'
-        : `Ply ${currentPlyIndex} of ${totalPlies}`;
+        : `Ply ${currentPlyIndex} of ${totalReplayPlies || turns.length * 2}`;
     return { sideToMove, checkInfo, positionLabel };
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink selection:bg-ink selection:text-paper">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-line bg-paper/85 px-5 backdrop-blur-md sm:px-6">
+      <header className="sticky top-0 z-40 shrink-0 border-b border-line bg-paper/85 px-5 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between">
           <Link href="/" className="group/logo inline-flex rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2">
             <Logo wordmarkSize="md" />
@@ -194,19 +223,8 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
         </div>
       </header>
 
-      {/* Main */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5 md:px-6 md:py-8">
-        <div className="mb-4 shrink-0 space-y-1">
-          <h1 className="truncate text-[clamp(1.125rem,4vw,1.5rem)] font-bold tracking-tight text-ink">
-            {title}
-          </h1>
-          <p className="text-[12px] text-muted">
-            Shared on {formatSharedDate(createdAt)}
-          </p>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-5 pb-2">
-          {/* Toolbar — mirrors dashboard review workspace */}
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-y-auto px-4 py-5 md:px-6 md:py-8 lg:overflow-visible">
+        <div className="flex flex-col gap-3 lg:gap-4">
           <div className="card flex shrink-0 items-center justify-between px-4 py-2.5">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface px-2.5 py-1 text-[11px] font-medium text-muted">
               <Link2 className="h-3 w-3" /> Public replay
@@ -222,21 +240,35 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
             downloadFileName={downloadFileName}
           />
 
-          {/* panel grid — mobile: board → move sheet → PGN; lg: board+PGN | move sheet */}
-          <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]">
-            {/* Board */}
-            <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
-              <div ref={boardCardRef} className="card shrink-0 overflow-hidden p-0">
-                <div className="space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
+          <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)] lg:items-stretch lg:gap-5">
+            {/* Board column */}
+            <div className="order-1 flex min-w-0 flex-col gap-3 lg:min-h-0 lg:overflow-hidden">
+              <div className="card flex w-full flex-col overflow-hidden p-0 lg:self-start">
+                <div className="shrink-0 space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-[15px] font-semibold text-ink">Visual replay</h3>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium leading-none text-muted-2">
+                        Visual replay
+                      </p>
+                      <h3
+                        className="mt-1 min-w-0 truncate text-[15px] font-semibold leading-snug text-ink sm:text-[16px]"
+                        title={title}
+                      >
+                        {title}
+                      </h3>
+                      <p className="mt-1 text-[11px] text-muted">
+                        Shared on {formatSharedDate(createdAt)}
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setBoardOrientation(boardOrientation === 'white' ? 'black' : 'white')}
+                      onClick={() =>
+                        setBoardOrientation(boardOrientation === 'white' ? 'black' : 'white')
+                      }
                       className="btn-secondary btn-sm shrink-0 px-2.5 sm:px-3"
                       title="Flip board perspective"
                     >
-                      <RotateCw className="h-3.5 w-3.5" />
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">Flip board</span>
                     </button>
                   </div>
@@ -244,24 +276,25 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
                     const { sideToMove, checkInfo, positionLabel } = getBoardStatus();
                     return (
                       <>
-                        <p className="min-h-[18px] text-[12px] leading-snug text-muted">
+                        <p className="min-h-[1.625rem] text-[12px] leading-snug text-muted">
                           <span className="gp-nums">{positionLabel}</span>
                           <span aria-hidden="true" className="text-muted-2">
                             {' '}
                             ·{' '}
                           </span>
                           <span>{sideToMove} to move</span>
-                          {checkInfo ? (
-                            <span
-                              className={`ml-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle ${
-                                checkInfo.type === 'checkmate'
+                          <span
+                            className={`ml-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle ${
+                              checkInfo
+                                ? checkInfo.type === 'checkmate'
                                   ? 'border-[#fbcfe3] bg-danger-bg text-danger'
                                   : 'border-amber-200 bg-warn-bg text-warn'
-                              }`}
-                            >
-                              {checkInfo.type === 'checkmate' ? 'Checkmate' : 'Check'}
-                            </span>
-                          ) : null}
+                                : 'pointer-events-none border-transparent opacity-0'
+                            }`}
+                            aria-hidden={!checkInfo}
+                          >
+                            {checkInfo?.type === 'checkmate' ? 'Checkmate' : 'Check'}
+                          </span>
                         </p>
                         <div className="flex items-center gap-2">
                           <BoardThemePicker
@@ -277,72 +310,132 @@ export default function ShareClient({ title, pgn, movesJson, createdAt }: ShareC
                   })()}
                 </div>
 
-                <div className="bg-surface px-3 py-3 sm:px-4 sm:py-4">
-                  <ChessBoard
-                    fen={getBoardFen()}
-                    orientation={boardOrientation}
-                    lastMove={getLastMove()}
-                    checkSquare={getCheckHighlight()?.square}
-                    checkType={getCheckHighlight()?.type}
-                    boardTheme={boardTheme}
-                    showColorPicker={false}
-                    maxWidth="100%"
-                  />
+                <div className="flex flex-col bg-surface px-3 py-3 sm:px-4 sm:py-4">
+                  <div className="mx-auto flex w-full max-w-[560px] flex-col">
+                    <BoardPlayerRail name={boardTopPlayer} position="top" />
+                    <div className="gp-board-fit-host gp-board-fit-host--stacked">
+                      <ChessBoard
+                        fen={getBoardFen()}
+                        orientation={boardOrientation}
+                        lastMove={getLastMove()}
+                        checkSquare={getCheckHighlight()?.square}
+                        checkType={getCheckHighlight()?.type}
+                        boardTheme={boardTheme}
+                        showColorPicker={false}
+                        maxWidth="100%"
+                        className="mx-auto"
+                      />
+                    </div>
+                    <BoardPlayerRail name={boardBottomPlayer} position="bottom" />
+                    {turns.length > 0 ? (
+                      <div className="lg:hidden">
+                        <ReplayControls
+                          {...replayPlayback}
+                          currentPlyIndex={currentPlyIndex}
+                          totalPlies={totalReplayPlies}
+                          variant="overlay"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
+              </div>
+
+              <div className="hidden min-h-[9.5rem] shrink-0 overflow-hidden lg:block lg:h-[9.5rem]">
+                <ExportPanel
+                  section="pgn"
+                  pgn={cleanedPgn}
+                  gameIsValid
+                  isPaid
+                  gameId={null}
+                  fillHeight
+                  compact
+                />
               </div>
             </div>
 
-            {/* Move sheet — directly under board on mobile; right column on lg */}
-            <div className="order-2 flex min-w-0 flex-col gap-2 lg:col-start-2 lg:row-start-1 lg:row-span-3">
-              <div
-                className="flex h-[min(420px,45vh)] min-h-0 flex-col overflow-hidden lg:h-auto lg:min-h-[280px]"
-                style={
-                  boardCardHeight != null && boardCardHeight > 0
-                    ? { height: boardCardHeight }
-                    : undefined
-                }
-              >
+            {/* Move sheet */}
+            <div className="order-2 flex min-w-0 flex-col gap-2 lg:min-h-0 lg:overflow-hidden">
+              <div className="flex h-[min(420px,50vh)] min-h-[280px] flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1 lg:max-h-none">
                 <MoveList
                   turns={turns}
                   currentPlyIndex={currentPlyIndex}
                   onSelectPly={setCurrentPlyIndex}
                   readOnly
-                  shareReplay
+                  playback={replayPlayback}
+                  playbackBarClassName="hidden lg:block"
                 />
               </div>
-            </div>
 
-            <div className="order-4 hidden min-w-0 lg:col-start-1 lg:row-start-3 lg:block">
-              <ExportPanel
-                section="pgn"
-                pgn={cleanedPgn}
-                gameIsValid
-                isPaid
-                gameId={null}
-              />
+              <div className="hidden shrink-0 flex-col gap-2 lg:flex">
+                <span className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-2">
+                  Analyze elsewhere
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.open(
+                      `https://lichess.org/analysis/pgn/${encodeURIComponent(cleanedPgn)}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    )
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-line-strong bg-paper py-2.5 text-[13px] font-semibold text-muted transition-all hover:border-muted-2 hover:bg-surface-2 hover:text-ink"
+                >
+                  <SiLichess className="h-4 w-4" aria-hidden="true" />
+                  Open in Lichess
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.open(
+                      `https://www.chess.com/analysis?pgn=${encodeURIComponent(cleanedPgn)}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    )
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-line-strong bg-paper py-2.5 text-[13px] font-semibold text-muted transition-all hover:border-[var(--color-positive)] hover:bg-surface-2 hover:text-positive"
+                >
+                  <SiChessdotcom className="h-4 w-4 text-positive" aria-hidden="true" />
+                  Open in Chess.com
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Conversion CTA */}
         <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-[16px] border border-line bg-surface px-6 py-6 text-center sm:mt-8 sm:flex-row sm:text-left">
           <div>
             <h3 className="text-[15px] font-semibold text-ink">Digitize your own scoresheets</h3>
-            <p className="mt-0.5 text-[13px] text-muted">Turn a photo or PGN into a validated, shareable game in seconds.</p>
+            <p className="mt-0.5 text-[13px] text-muted">
+              Turn a photo or PGN into a validated, shareable game in seconds.
+            </p>
           </div>
           <Link href="/" className="btn-primary btn-md shrink-0">
             Try GetPGN free <ArrowUpRight className="h-4 w-4" />
           </Link>
         </div>
+
+        <footer className="mt-8 shrink-0 border-t border-line py-6 text-center text-[12px] text-muted-2 lg:hidden">
+          <p>© {new Date().getFullYear()} GetPGN — Chess scoresheet digitizer</p>
+          <p className="mt-2 text-muted">
+            <Link href="/privacy" className="legal-link">Privacy</Link>
+            {' · '}
+            <Link href="/terms" className="legal-link">Terms</Link>
+            {' · '}
+            <Link href="/refund" className="legal-link">Refunds</Link>
+          </p>
+        </footer>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-line bg-paper px-5 py-6 text-center text-[12px] text-muted-2">
+      <footer className="mt-auto hidden shrink-0 border-t border-line bg-paper px-5 py-6 text-center text-[12px] text-muted-2 lg:block">
         <p>© {new Date().getFullYear()} GetPGN — Chess scoresheet digitizer</p>
         <p className="mt-2 text-muted">
           <Link href="/privacy" className="legal-link">Privacy</Link>
-          {" · "}
-          <Link href="/refund" className="legal-link">Refunds</Link>
+            {' · '}
+            <Link href="/terms" className="legal-link">Terms</Link>
+            {' · '}
+            <Link href="/refund" className="legal-link">Refunds</Link>
         </p>
       </footer>
     </div>

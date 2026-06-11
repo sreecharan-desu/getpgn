@@ -42,7 +42,7 @@ export function buildInvoicePdf(data: InvoiceData): Buffer {
     ...(data.paymentId ? [{ text: `Payment: ${data.paymentId}`, size: 9 }] : []),
     { text: '', size: 10 },
     { text: 'Payment processed by Razorpay', size: 9 },
-    { text: 'https://getpgn.in · support@getpgn.in', size: 9 },
+    { text: 'https://getpgn.in · getpgn@gmail.com', size: 9 },
   ];
 
   if (data.simulated) {

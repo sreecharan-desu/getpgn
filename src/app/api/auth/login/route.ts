@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
             passwordHash: true,
             plan: true,
             emailVerified: true,
+            onboardingCompleted: true,
           },
         })
       : await prisma.user.findUnique({
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
             passwordHash: true,
             plan: true,
             emailVerified: true,
+            onboardingCompleted: true,
           },
         });
 
@@ -59,8 +61,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 });
     }
 
+    await createSession(user.id, user.username);
+
+    if (!user.email) {
+      return NextResponse.json({
+        success: true,
+        needsEmail: true,
+        username: user.username,
+        message: 'Add your email to continue.',
+      });
+    }
+
     if (!user.emailVerified) {
-      await createSession(user.id, user.username);
       return NextResponse.json({
         success: true,
         needsVerification: true,
@@ -69,7 +81,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await createSession(user.id, user.username);
+    if (!user.onboardingCompleted) {
+      return NextResponse.json({
+        success: true,
+        needsOnboarding: true,
+        message: 'Complete onboarding to continue.',
+      });
+    }
 
     return NextResponse.json({
       success: true,

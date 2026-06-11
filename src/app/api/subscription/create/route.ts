@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
 
     try {
       const body = await req.json();
-      if (body?.plan === 'yearly') planType = 'yearly';
+      if (body?.plan === 'enterprise') planType = 'enterprise';
+      else if (body?.plan === 'yearly') planType = 'yearly';
       else if (body?.plan === 'monthly') planType = 'monthly';
     } catch {
       // default monthly

@@ -1,88 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { queueVerificationEmail } from '@/lib/emailVerification';
+import { attachReferralAtSignup, generateUniqueReferralCode } from '@/lib/referrals';
+import { notifyReferrerFriendSignedUp } from '@/lib/notificationEmail';
 import { createSession } from '@/lib/session';
 import { apiError, getClientIp } from '@/lib/security';
 import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
-import { getEmailDomain, isDisposableEmail } from '@/lib/disposableEmail';
+import { USERNAME_PATTERN } from '@/lib/signupFlow';
 import bcrypt from 'bcryptjs';
+import { defaultAvatarPiece } from '@/lib/chessAvatars';
 
+/** Step 1–2: create account with username + password (email added later). */
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
   const ipLimit = rateLimit(`signup:ip:${ip}`, 5, 60 * 60_000);
   if (!ipLimit.ok) return rateLimitResponse(ipLimit.retryAfterSec);
 
   try {
-    const { username, email, password } = await req.json();
+    const { username: rawUsername, password, referralCode } = await req.json();
+    const username = typeof rawUsername === 'string' ? rawUsername.trim() : '';
 
-    if (!username || !email || !password) {
-      return NextResponse.json({ error: 'Username, email, and password are required.' }, { status: 400 });
-    }
-
-    if (username.length > 32 || email.length > 254) {
-      return NextResponse.json({ error: 'Username or email is too long.' }, { status: 400 });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: 'Please provide a valid email address.' }, { status: 400 });
-    }
-
-    if (username.length < 3 || password.length < 8) {
+    if (!username || !password) {
       return NextResponse.json(
-        { error: 'Username must be at least 3 characters and password at least 8 characters.' },
+        { error: 'Username and password are required.' },
         { status: 400 },
       );
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (isDisposableEmail(normalizedEmail)) {
+    if (!USERNAME_PATTERN.test(username)) {
       return NextResponse.json(
-        { error: 'Please use a permanent email address to sign up.' },
+        { error: 'Username must be 3–32 characters (letters, numbers, _ or -).' },
         { status: 400 },
       );
     }
 
-    const emailDomain = getEmailDomain(normalizedEmail);
-    if (emailDomain) {
-      const domainLimit = rateLimit(`signup:domain:${emailDomain}`, 3, 24 * 60 * 60_000);
-      if (!domainLimit.ok) return rateLimitResponse(domainLimit.retryAfterSec);
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: 'Password must be at least 8 characters.' },
+        { status: 400 },
+      );
     }
 
-    const [existingUsername, existingEmail] = await Promise.all([
-      prisma.user.findUnique({ where: { username }, select: { id: true } }),
-      prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }),
-    ]);
+    const existingUsername = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true },
+    });
 
     if (existingUsername) {
       return NextResponse.json({ error: 'Username is already taken.' }, { status: 400 });
     }
 
-    if (existingEmail) {
-      return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 400 });
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
+    const newReferralCode = await generateUniqueReferralCode();
 
     const user = await prisma.user.create({
       data: {
         username,
-        email: normalizedEmail,
+        email: null,
         passwordHash,
         plan: 'FREE',
         emailVerified: false,
+        referralCode: newReferralCode,
+        avatarPiece: defaultAvatarPiece(username),
       },
       select: { id: true, username: true },
     });
 
-    queueVerificationEmail(user.id, normalizedEmail);
+    if (typeof referralCode === 'string' && referralCode.trim()) {
+      const referral = await attachReferralAtSignup(user.id, referralCode).catch((err) => {
+        console.warn('[Signup] Referral attach failed:', err);
+        return { attached: false as const };
+      });
+      if (referral?.attached && referral.referrerId && referral.refereeUsername) {
+        notifyReferrerFriendSignedUp(referral.referrerId, referral.refereeUsername);
+      }
+    }
+
     await createSession(user.id, user.username);
 
     return NextResponse.json({
       success: true,
-      email: normalizedEmail,
-      message: 'Account created. Please verify your email to continue.',
+      username: user.username,
+      message: 'Account created. Add your email to continue.',
     });
   } catch (error) {
     return apiError('Signup', error, 'Could not create account.');

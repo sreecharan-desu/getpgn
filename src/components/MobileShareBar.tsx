@@ -11,9 +11,19 @@ interface MobileShareBarProps {
   pgn: string;
   isPaid?: boolean;
   gameId?: string | null;
+  isDraftGame?: boolean;
   sharedSlug?: string | null;
+  saveMeta?: {
+    title: string;
+    whitePlayer: string;
+    blackPlayer: string;
+  };
   downloadFileName?: string;
-  onSave?: (title: string) => Promise<string | null>;
+  onSave?: (input: {
+    title: string;
+    whitePlayer: string;
+    blackPlayer: string;
+  }) => Promise<string | null>;
   onShare?: (gameId: string) => Promise<string | null>;
 }
 
@@ -25,7 +35,9 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
   pgn,
   isPaid = false,
   gameId = null,
+  isDraftGame = false,
   sharedSlug = null,
+  saveMeta,
   downloadFileName,
   onSave,
   onShare,
@@ -35,26 +47,56 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
   const [pgnCopied, setPgnCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [saveTitle, setSaveTitle] = useState("");
+  const [whitePlayer, setWhitePlayer] = useState("");
+  const [blackPlayer, setBlackPlayer] = useState("");
 
   const shareUrl = sharedSlug
     ? `${window.location.origin}/share/${sharedSlug}`
     : "";
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!isPaid) {
       toast.info("Upgrade to Pro to save games to your library.");
       return;
     }
-    if (gameId) {
+    if (gameId && !isDraftGame) {
       toast.info("Game already saved.");
       return;
     }
     if (!onSave || !pgn) return;
+    if (isDraftGame && saveMeta) {
+      setSaving(true);
+      void onSave({
+        title: saveMeta.title,
+        whitePlayer: saveMeta.whitePlayer,
+        blackPlayer: saveMeta.blackPlayer,
+      }).finally(() => setSaving(false));
+      return;
+    }
+    setSaveTitle(`Scanned Game - ${new Date().toLocaleDateString("en-CA")}`);
+    setWhitePlayer("");
+    setBlackPlayer("");
+    setShowSaveForm(true);
+  };
 
+  const submitSave = async () => {
+    if (!onSave || !saveTitle.trim() || !whitePlayer.trim() || !blackPlayer.trim()) {
+      toast.error("Title and both player names are required.");
+      return;
+    }
     setSaving(true);
     try {
-      const title = `Scanned Game - ${new Date().toLocaleDateString("en-CA")}`;
-      await onSave(title);
+      const id = await onSave({
+        title: saveTitle.trim(),
+        whitePlayer: whitePlayer.trim(),
+        blackPlayer: blackPlayer.trim(),
+      });
+      if (id) {
+        setShowSaveForm(false);
+        toast.success("Game saved");
+      }
     } finally {
       setSaving(false);
     }
@@ -148,7 +190,8 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
   };
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-[12px] border border-line bg-surface px-3 py-2 lg:hidden">
+    <div className="space-y-2 lg:hidden">
+    <div className="flex items-center justify-between gap-2 rounded-[12px] border border-line bg-surface px-3 py-2">
       <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-muted-2">
         Share
       </span>
@@ -256,6 +299,51 @@ export const MobileShareBar: React.FC<MobileShareBarProps> = ({
       {shareUrl ? (
         <span className="sr-only">Share link active: {shareUrl}</span>
       ) : null}
+    </div>
+    {showSaveForm ? (
+      <div className="space-y-2 rounded-[12px] border border-line bg-paper p-3">
+        <input
+          type="text"
+          value={saveTitle}
+          onChange={(e) => setSaveTitle(e.target.value)}
+          placeholder="Game title"
+          className="w-full rounded-lg border border-line px-3 py-2 text-[13px]"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="text"
+            value={whitePlayer}
+            onChange={(e) => setWhitePlayer(e.target.value)}
+            placeholder="White player"
+            className="w-full rounded-lg border border-line px-3 py-2 text-[13px]"
+          />
+          <input
+            type="text"
+            value={blackPlayer}
+            onChange={(e) => setBlackPlayer(e.target.value)}
+            placeholder="Black player"
+            className="w-full rounded-lg border border-line px-3 py-2 text-[13px]"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSaveForm(false)}
+            className="flex-1 rounded-lg border border-line px-3 py-2 text-[12px] font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void submitSave()}
+            disabled={saving}
+            className="flex-1 rounded-lg bg-ink px-3 py-2 text-[12px] font-bold text-paper disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save game"}
+          </button>
+        </div>
+      </div>
+    ) : null}
     </div>
   );
 };

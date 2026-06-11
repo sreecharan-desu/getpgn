@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { prisma } from '@/lib/db';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { validateChessMoves } from '@/lib/chess-validator';
 import { apiError, validateImageUpload } from '@/lib/security';
@@ -9,7 +10,14 @@ import {
   rollbackScanReservation,
   type ScanReservation,
 } from '@/lib/scanLimits';
+import { notifyOrganizerWalletScanUsed } from '@/lib/notificationEmail';
 import { createValidationSessionToken } from '@/lib/validationSession';
+import { completeReferralOnFirstScan } from '@/lib/referrals';
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  EXTRACTION_USER_MESSAGE,
+} from '@/lib/extractionPrompt';
+import { normalizeExtractedMoves } from '@/lib/extractedNotation';
 
 let cachedAiClient: GoogleGenAI | null = null;
 
@@ -67,37 +75,7 @@ export async function POST(req: NextRequest) {
 
     const ai = getAiClient(apiKey);
 
-    const systemPrompt = `You are an expert chess scoresheet OCR extraction engine. Your job is to accurately read every chess move written on the scoresheet image.
-
-Return JSON only in this exact schema structure:
-{
-  "moves": [
-    {
-      "moveNumber": 1,
-      "white": { "notation": "e4", "confidence": 0.98 },
-      "black": { "notation": "e5", "confidence": 0.97 }
-    }
-  ]
-}
-
-EXTRACTION RULES:
-1. Piece letters: K=King Q=Queen R=Rook B=Bishop N=Knight. If a letter looks like W or J, it is most likely N (Knight).
-2. Castling: always write as capital letter O, not zero. O-O (kingside) or O-O-O (queenside).
-3. Captures use lowercase x (not uppercase X).
-4. Do NOT include game result tokens (1-0, 0-1, ½-½, 1/2-1/2) as moves.
-5. If black's last move is missing (game ended on white's move), return empty string for black notation.
-6. File letters are always a-h lowercase. Rank numbers are always 1-8.
-
-AMBIGUITY RESOLUTION (critical — apply in this order):
-7. b vs h file confusion: When a Bishop or Rook move could be file 'b' or file 'h', choose the square that is LEGALLY REACHABLE from the piece's current position. Example: if the bishop is on c4, "Bb5" is reachable but "Bh5" is not — use "Bb5".
-8. Digit-as-letter confusion: If you see a '9' where a file letter should be (between a piece letter and a destination square), it is likely the letter 'g'. Extract what you see literally and flag as uncertain.
-9. N vs W: Always prefer N over W for knight moves. W is never a valid piece letter.
-10. Check (+) and checkmate (#) symbols: Only include if clearly written at the END of the move. Never include them mid-notation.
-11. Move number confusion: Ignore move numbers when extracting notation (e.g. "12. Nf3" → extract "Nf3").
-
-UNCERTAINTY:
-12. If a move is illegible or ambiguous after applying the rules above, include your best read in "moves" with low confidence (< 0.75) — never omit a move entirely.
-13. Never invent or hallucinate moves that are not visible on the sheet.`;
+    const systemPrompt = EXTRACTION_SYSTEM_PROMPT;
 
     const aiStartTime = Date.now();
     const modelName = process.env.AI_MODEL_NAME || ['ge', 'mi', 'ni', '-2.5-flash-lite'].join('');
@@ -105,10 +83,11 @@ UNCERTAINTY:
       model: modelName,
       contents: [
         {
-          inlineData: {
-            data: base64Data,
-            mimeType,
-          },
+          role: 'user',
+          parts: [
+            { inlineData: { data: base64Data, mimeType } },
+            { text: EXTRACTION_USER_MESSAGE },
+          ],
         },
       ],
       config: {
@@ -161,7 +140,10 @@ UNCERTAINTY:
 
     try {
       const parsedJson = JSON.parse(responseText);
-      const validation = validateChessMoves(parsedJson.moves);
+      const normalizedMoves = normalizeExtractedMoves(parsedJson.moves ?? []);
+      const validation = validateChessMoves(normalizedMoves, {
+        strictRecovery: true,
+      });
 
       parsedJson.moves = validation.moves;
       parsedJson.pgn = validation.pgn;
@@ -173,7 +155,33 @@ UNCERTAINTY:
       parsedJson.validationToken = createValidationSessionToken(auth.user.id);
       parsedJson.scanConsumed = true;
 
+      if (reservation.source === 'organizer_wallet') {
+        void notifyOrganizerWalletScanUsed(auth.user.id).catch((err) =>
+          console.error('[Extract API] Wallet notification failed:', err),
+        );
+      }
+
       reservation = null;
+
+      try {
+        const referralResult = await completeReferralOnFirstScan(auth.user.id);
+        if (referralResult.completed) {
+          parsedJson.referralBonusApplied = true;
+          parsedJson.referrerUsername = referralResult.referrerUsername;
+          parsedJson.referralRewardScans = referralResult.rewardScans;
+        }
+      } catch (err) {
+        console.warn('[Extract API] Referral completion failed:', err);
+      }
+
+      const freshQuota = await prisma.user.findUnique({
+        where: { id: auth.user.id },
+        select: { scanCount: true, bonusScanCount: true },
+      });
+      if (freshQuota) {
+        parsedJson.scanCount = freshQuota.scanCount;
+        parsedJson.bonusScanCount = freshQuota.bonusScanCount;
+      }
 
       console.log(
         `[Extract API] ── END (success, total time ${Date.now() - apiStartTime}ms) ─────────────────────────────`,

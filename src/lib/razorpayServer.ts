@@ -32,6 +32,16 @@ export function isProductionDeploy(): boolean {
   return process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
 }
 
+function isTruthyEnvFlag(value: string | undefined): boolean {
+  const flag = sanitizeEnv(value).toLowerCase();
+  return flag === 'true' || flag === '1' || flag === 'yes';
+}
+
+/** When true, rzp_test_ keys work even under NODE_ENV=production (local prod builds). */
+export function isRazorpayTestModeAllowed(): boolean {
+  return isTruthyEnvFlag(process.env.RAZORPAY_ALLOW_TEST_KEYS);
+}
+
 export function readRazorpayConfig():
   | { ok: true; config: RazorpayConfig }
   | { ok: false; error: string } {
@@ -52,9 +62,15 @@ export function readRazorpayConfig():
     return { ok: false, error: PAYMENTS_UNAVAILABLE };
   }
 
-  if (isProductionDeploy() && mode === 'test') {
-    console.error('[Razorpay] Production deploy is using test keys.');
+  if (isProductionDeploy() && mode === 'test' && !isRazorpayTestModeAllowed()) {
+    console.error(
+      '[Razorpay] Production deploy is using test keys. Set RAZORPAY_ALLOW_TEST_KEYS=true to override.',
+    );
     return { ok: false, error: PAYMENTS_UNAVAILABLE };
+  }
+
+  if (isProductionDeploy() && mode === 'test' && isRazorpayTestModeAllowed()) {
+    console.warn('[Razorpay] Test keys active in production build — no real charges.');
   }
 
   if (keySecret.length < 24) {
@@ -65,12 +81,16 @@ export function readRazorpayConfig():
   return { ok: true, config: { keyId, keySecret, mode } };
 }
 
-export function getRazorpayPlanId(planType: 'monthly' | 'yearly'): string | null {
-  const planId = sanitizeEnv(
+export function getRazorpayPlanId(
+  planType: 'monthly' | 'yearly' | 'enterprise',
+): string | null {
+  const envKey =
     planType === 'monthly'
-      ? process.env.RAZORPAY_MONTHLY_PLAN_ID
-      : process.env.RAZORPAY_YEARLY_PLAN_ID,
-  );
+      ? 'RAZORPAY_MONTHLY_PLAN_ID'
+      : planType === 'yearly'
+        ? 'RAZORPAY_YEARLY_PLAN_ID'
+        : 'RAZORPAY_ENTERPRISE_PLAN_ID';
+  const planId = sanitizeEnv(process.env[envKey]);
 
   if (!planId || planId.includes('placeholder')) return null;
   if (!isValidPlanId(planId)) {

@@ -32,14 +32,17 @@ export function PolicyFooter() {
           aria-label="Legal"
         >
           <LegalLink href="/privacy">Privacy Policy</LegalLink>
+          <LegalLink href="/terms">Terms &amp; Conditions</LegalLink>
           <LegalLink href="/refund">Refund &amp; Cancellation</LegalLink>
           <a href={`mailto:${LEGAL.contactEmail}`} className="legal-link">
             Contact
           </a>
         </nav>
         <p className="text-[11px] text-muted">
-          © {new Date().getFullYear()} {LEGAL.siteName} · Chess scoresheet
-          digitizer
+          Built by Chess Coaches. Powered by ABCChess Education LLP.
+        </p>
+        <p className="text-[11px] text-muted-2">
+          © {new Date().getFullYear()} {LEGAL.siteName} · Chess scoresheet digitizer
         </p>
       </div>
     </footer>
@@ -52,6 +55,8 @@ export function LegalTrustLinks({ className = "" }: { className?: string }) {
     <p className={`text-[12px] leading-relaxed text-muted ${className}`}>
       Your data stays in your account — never sold or shared with third parties.{" "}
       <LegalLink href="/privacy">Privacy</LegalLink>
+      {" · "}
+      <LegalLink href="/terms">Terms</LegalLink>
       {" · "}
       <LegalLink href="/refund">Refunds</LegalLink>
     </p>

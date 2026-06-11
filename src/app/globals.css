@@ -78,9 +78,172 @@ select:disabled {
 
   --radius-card: 16px;
 
-  --shadow-soft: 0 1px 2px rgba(10, 10, 10, 0.04);
-  --shadow-pop: 0 8px 30px rgba(10, 10, 10, 0.08);
-  --shadow-modal: 0 24px 60px rgba(10, 10, 10, 0.18);
+  --shadow-soft: 0 1px 2px rgba(10, 10, 10, 0.03);
+  --shadow-pop: 0 2px 8px rgba(10, 10, 10, 0.04);
+  --shadow-modal: 0 8px 24px rgba(10, 10, 10, 0.08);
+}
+
+/* Register theme tokens so light ↔ dark can interpolate smoothly. */
+@property --background {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --foreground {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0a0a0a;
+}
+@property --color-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0a0a0a;
+}
+@property --color-ink-soft {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #171717;
+}
+@property --color-paper {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --color-surface {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fafafa;
+}
+@property --color-surface-2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f5f5f5;
+}
+@property --color-line {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ededed;
+}
+@property --color-line-strong {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e2e2e2;
+}
+@property --color-muted {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #737373;
+}
+@property --color-muted-2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a3a3a3;
+}
+@property --color-faint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d4d4d4;
+}
+@property --color-positive {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #15803d;
+}
+@property --color-positive-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f0fdf4;
+}
+@property --color-warn {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #b45309;
+}
+@property --color-warn-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fffbeb;
+}
+@property --color-danger {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #be123c;
+}
+@property --color-danger-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fff1f2;
+}
+
+@property --lp-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --lp-bg-elevated {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fafafa;
+}
+@property --lp-bg-muted {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f7f7f7;
+}
+@property --lp-bg-subtle {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fafafa;
+}
+@property --lp-text {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0a0a0a;
+}
+@property --lp-text-secondary {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #404040;
+}
+@property --lp-text-muted {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #6b6b6b;
+}
+@property --lp-border {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e8e8e8;
+}
+@property --lp-border-subtle {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f0f0f0;
+}
+@property --lp-card {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --lp-nav-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --lp-btn-primary-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0a0a0a;
+}
+@property --lp-btn-primary-text {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --lp-btn-secondary-border {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e5e5e5;
 }
 
 :root {
@@ -116,17 +279,17 @@ select:disabled {
   --color-danger: #fb7185;
   --color-danger-bg: #2c1015;
 
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.5);
-  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.22);
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.32);
 
   color-scheme: dark;
 }
 
-/* Full-screen scoresheet extraction — pure white or pure black */
+/* Full-screen scoresheet extraction — follows app theme tokens */
 .extracting-screen {
-  background: #ffffff;
-  color: #0a0a0a;
+  background: var(--color-paper);
+  color: var(--color-ink);
   --extract-muted: #737373;
   --extract-faint: #a3a3a3;
   --extract-track: #e5e5e5;
@@ -140,8 +303,6 @@ select:disabled {
 }
 
 .dark .extracting-screen {
-  background: #000000;
-  color: #ffffff;
   --extract-muted: #a3a3a3;
   --extract-faint: #737373;
   --extract-track: #262626;
@@ -168,7 +329,7 @@ select:disabled {
   --lp-border: #e8e8e8;
   --lp-border-subtle: #f0f0f0;
   --lp-card: #ffffff;
-  --lp-card-shadow: 0 0 0 1px rgba(0, 0, 0, 0.03), 0 24px 64px -12px rgba(0, 0, 0, 0.08);
+  --lp-card-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
   --lp-nav-bg: rgba(255, 255, 255, 0.8);
   --lp-btn-primary-bg: #0a0a0a;
   --lp-btn-primary-text: #ffffff;
@@ -197,32 +358,32 @@ select:disabled {
   --lp-success-text: #15803d;
   --lp-warn-bg: rgba(180, 83, 9, 0.1);
   --lp-warn-text: #b45309;
-  --lp-nav-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 12px 40px rgba(0, 0, 0, 0.04);
+  --lp-nav-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
   background: var(--lp-bg);
   color: var(--lp-text);
 }
 
 .dark .landing-page {
-  --lp-bg: #050505;
-  --lp-bg-elevated: #0a0a0a;
-  --lp-bg-muted: #080808;
-  --lp-bg-subtle: #070707;
-  --lp-text: #f5f5f5;
-  --lp-text-secondary: #c8c8c8;
-  --lp-text-muted: #8a8a8a;
-  --lp-text-faint: #5c5c5c;
-  --lp-text-dim: #333333;
-  --lp-border: #1f1f1f;
-  --lp-border-subtle: #161616;
-  --lp-card: #0a0a0a;
-  --lp-nav-bg: rgba(5, 5, 5, 0.82);
-  --lp-btn-primary-bg: #f5f5f5;
-  --lp-btn-primary-text: #0a0a0a;
-  --lp-card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 32px 80px -16px rgba(0, 0, 0, 0.65);
+  --lp-bg: #0b0b0c;
+  --lp-bg-elevated: #161618;
+  --lp-bg-muted: #121214;
+  --lp-bg-subtle: #161618;
+  --lp-text: #f4f4f5;
+  --lp-text-secondary: #d4d4d8;
+  --lp-text-muted: #b4b4bd;
+  --lp-text-faint: #8b8b94;
+  --lp-text-dim: #52525b;
+  --lp-border: #2a2a2d;
+  --lp-border-subtle: #202022;
+  --lp-card: #161618;
+  --lp-nav-bg: rgba(11, 11, 12, 0.88);
+  --lp-btn-primary-bg: #f4f4f5;
+  --lp-btn-primary-text: #0b0b0c;
+  --lp-card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   --lp-btn-primary-shadow: none;
-  --lp-btn-secondary-border: #2a2a2a;
+  --lp-btn-secondary-border: #3a3a3e;
   --lp-grid-dot: rgba(255, 255, 255, 0.045);
-  --lp-grid-fade: rgba(5, 5, 5, 0.94);
+  --lp-grid-fade: rgba(11, 11, 12, 0.94);
   --lp-hero-glow: rgba(255, 255, 255, 0.03);
   --lp-stat-bg: rgba(12, 12, 12, 0.85);
   --lp-mock-ring: rgba(255, 255, 255, 0.08);
@@ -236,15 +397,15 @@ select:disabled {
   --lp-badge-sky-bg: rgba(14, 165, 233, 0.12);
   --lp-badge-sky-text: #7dd3fc;
   --lp-badge-sky-ring: rgba(14, 165, 233, 0.22);
-  --lp-icon-bg: #171717;
-  --lp-icon-text: #d4d4d4;
-  --lp-accent-line: linear-gradient(90deg, transparent, #262626 50%, transparent);
+  --lp-icon-bg: #202022;
+  --lp-icon-text: #d4d4d8;
+  --lp-accent-line: linear-gradient(90deg, transparent, #2a2a2d 50%, transparent);
   --lp-success-bg: rgba(74, 222, 128, 0.1);
   --lp-success-border: rgba(74, 222, 128, 0.22);
   --lp-success-text: #4ade80;
   --lp-warn-bg: rgba(251, 191, 36, 0.12);
   --lp-warn-text: #fbbf24;
-  --lp-nav-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 48px rgba(0, 0, 0, 0.5);
+  --lp-nav-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .dark .landing-page .landing-orb {
@@ -264,17 +425,9 @@ select:disabled {
 .landing-product-frame {
   position: relative;
   border-radius: 1rem;
-  padding: 1px;
-  background: linear-gradient(
-    165deg,
-    var(--lp-border) 0%,
-    var(--lp-border-subtle) 40%,
-    var(--lp-mock-ring) 100%
-  );
-  box-shadow:
-    0 0 0 1px var(--lp-mock-ring),
-    0 32px 80px -24px var(--lp-frame-glow),
-    var(--lp-card-shadow);
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  box-shadow: var(--lp-card-shadow);
 }
 
 @media (min-width: 640px) {
@@ -284,12 +437,17 @@ select:disabled {
 }
 
 .landing-product-frame > * {
-  border-radius: calc(1rem - 1px);
+  border-radius: calc(1rem - 2px);
+}
+
+/* Product screenshot — keep a light canvas in dark mode so the app UI reads clearly */
+.landing-hero-product-shot {
+  background: #f4f4f5;
 }
 
 @media (min-width: 640px) {
   .landing-product-frame > * {
-    border-radius: calc(1.25rem - 1px);
+    border-radius: calc(1.25rem - 2px);
   }
 }
 
@@ -378,59 +536,139 @@ select:disabled {
 
 @media (min-width: 1024px) {
   .landing-pricing-scroll:has(.pricing-card--featured) {
-    align-items: end;
-    padding-bottom: 0.75rem;
-  }
-
-  .landing-pricing-scroll .pricing-card-layout {
-    min-height: 32rem;
-  }
-
-  .landing-pricing-scroll .pricing-card--featured {
-    min-height: 38rem;
-    transform: translateY(-12px);
+    align-items: stretch;
+    padding-top: 6px;
   }
 }
 
-/* Premium pricing cards — layered elevation, not flat boxes */
+/* Pricing cards — border-first, minimal elevation */
 .pricing-card {
   position: relative;
   border-radius: 20px;
   background: var(--color-paper);
-  border: 1px solid color-mix(in srgb, var(--color-line) 85%, transparent);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--color-ink) 3%, transparent),
-    0 1px 2px color-mix(in srgb, var(--color-ink) 4%, transparent),
-    0 8px 28px color-mix(in srgb, var(--color-ink) 6%, transparent);
+  border: 1px solid var(--color-line);
+  box-shadow: var(--shadow-soft);
   transition:
-    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background-color 0.2s ease;
 }
 
 @media (hover: hover) {
   .pricing-card:hover {
     border-color: var(--color-line-strong);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--color-ink) 5%, transparent),
-      0 2px 4px color-mix(in srgb, var(--color-ink) 5%, transparent),
-      0 16px 40px color-mix(in srgb, var(--color-ink) 8%, transparent);
   }
 }
 
 .pricing-card--featured {
-  border-color: color-mix(in srgb, var(--color-ink) 12%, var(--color-line));
+  border-width: 2px;
+  border-color: var(--color-ink);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--color-ink) 6%, var(--color-paper)) 0%,
+      var(--color-paper) 52%
+    );
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--color-ink) 8%, transparent),
-    0 2px 6px color-mix(in srgb, var(--color-ink) 5%, transparent),
-    0 16px 48px color-mix(in srgb, var(--color-ink) 10%, transparent),
-    0 32px 64px color-mix(in srgb, var(--color-ink) 4%, transparent);
+    var(--shadow-pop),
+    0 0 0 1px color-mix(in srgb, var(--color-ink) 6%, transparent);
 }
 
-@media (min-width: 1024px) {
+.pricing-card--featured::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-ink) 70%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+@media (min-width: 1280px) {
   .pricing-card--featured {
-    transform: translateY(-4px);
+    transform: translateY(-6px);
   }
+}
+
+.pricing-card__intro {
+  min-height: 3.25rem;
+}
+
+.pricing-card__price-block {
+  margin-top: 1.5rem;
+  min-height: 5.5rem;
+}
+
+.pricing-card__subtext {
+  margin-top: 0.35rem;
+  min-height: 2.5rem;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-muted-2);
+}
+
+.pricing-card__cta {
+  margin-top: 1.5rem;
+}
+
+.pricing-card__features {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-line);
+  flex: 1;
+}
+
+.pricing-card--featured .pricing-card__features {
+  border-top-color: color-mix(in srgb, var(--color-ink) 12%, var(--color-line));
+}
+
+.pricing-card__badge-row {
+  display: flex;
+  justify-content: center;
+  margin: -0.15rem 0 0.85rem;
+}
+
+.pricing-card__badge-row--subtle {
+  margin-bottom: 0.65rem;
+}
+
+.pricing-card__badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  padding: 0.35rem 0.8rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-paper);
+  white-space: nowrap;
+}
+
+.pricing-card__badge--subtle {
+  background: color-mix(in srgb, var(--color-ink) 8%, var(--color-paper));
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-ink-soft);
+  font-size: 9px;
+  padding: 0.28rem 0.65rem;
+}
+
+.dark .pricing-card--featured {
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--color-paper) 8%, var(--color-surface)) 0%,
+      var(--color-paper) 48%
+    );
 }
 
 .pricing-modal-shell {
@@ -540,46 +778,59 @@ select:disabled {
   border-color: var(--color-line);
 }
 
-/* Temporary color crossfade when View Transitions API is unavailable. */
+/* Smooth, synchronized theme crossfade via registered design tokens. */
 @media (prefers-reduced-motion: no-preference) {
-  .theme-transition,
-  .theme-transition *,
-  .theme-transition *::before,
-  .theme-transition *::after {
+  html.theme-transition {
     transition:
-      background-color 200ms ease,
-      border-color 200ms ease,
-      color 200ms ease,
-      fill 200ms ease,
-      stroke 200ms ease !important;
+      --background 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --foreground 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-ink 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-ink-soft 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-paper 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-surface 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-surface-2 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-line 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-line-strong 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-muted 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-muted-2 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-faint 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-positive 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-positive-bg 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-warn 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-warn-bg 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-danger 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --color-danger-bg 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html.theme-transition .landing-page {
+    transition:
+      --lp-bg 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-bg-elevated 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-bg-muted 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-bg-subtle 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-text 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-text-secondary 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-text-muted 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-border 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-border-subtle 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-card 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-nav-bg 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-btn-primary-bg 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-btn-primary-text 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      --lp-btn-secondary-border 320ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-/* Circular theme reveal from click point (View Transitions API). */
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
-  }
-
-  ::view-transition-old(root) {
-    z-index: 0;
-  }
-
-  ::view-transition-new(root) {
-    z-index: 1;
-    animation: theme-corner-reveal 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  @keyframes theme-corner-reveal {
-    from {
-      clip-path: circle(0 at var(--theme-transition-x, 100%) var(--theme-transition-y, 0%));
-    }
-    to {
-      clip-path: circle(var(--theme-transition-r, 150vmax) at var(--theme-transition-x, 100%) var(--theme-transition-y, 0%));
-    }
-  }
+/* Toast notifications — minimal, theme-aware */
+.gp-toast {
+  backdrop-filter: blur(8px);
+}
+.gp-toast [data-title] {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.gp-toast [data-description] {
+  color: var(--color-muted) !important;
 }
 
 html {
@@ -878,8 +1129,7 @@ h1, h2, h3, h4 {
     border-color 0.35s ease;
 }
 .gp-landing-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-pop);
+  transform: translateY(-2px);
   border-color: var(--color-line-strong);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -924,6 +1174,45 @@ h1, h2, h3, h4 {
   position: absolute !important;
   top: 0;
   left: 0;
+}
+
+/* Fit board in fixed-height review columns (desktop) without clipping the last rank */
+.gp-board-fit-host {
+  width: 100%;
+  max-width: min(100%, 560px);
+  margin-inline: auto;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .gp-board-fit-host {
+    container-type: size;
+    flex: 1 1 0;
+    min-height: 0;
+    max-width: none;
+    display: grid;
+    place-items: center;
+    padding-bottom: 0.375rem;
+  }
+
+  .gp-board-fit-host .gp-chess-board {
+    width: min(100cqw, 100cqh, 560px);
+    max-width: 100%;
+  }
+
+  /* Share page: top/bottom player labels — keep board flush, no vertical centering */
+  .gp-board-fit-host--stacked {
+    container-type: inline-size;
+    flex: 0 0 auto;
+    min-height: auto;
+    display: block;
+    padding-bottom: 0;
+  }
+
+  .gp-board-fit-host--stacked .gp-chess-board {
+    width: min(100cqw, 560px);
+    max-width: 100%;
+  }
 }
 
 /* ── GetPGN premium chess board theme ───────────────────────── */
@@ -1272,8 +1561,8 @@ h1, h2, h3, h4 {
   will-change: transform;
 }
 .gp-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-pop);
+  transform: translateY(-1px);
+  border-color: var(--color-line-strong);
 }
 .gp-lift:active {
   transform: translateY(0);
@@ -1297,6 +1586,51 @@ h1, h2, h3, h4 {
 }
 .cg-wrap piece.dragging {
   cursor: grabbing;
+}
+
+/* Upload — branding panel shown beside preview */
+.gp-upload-brand-panel {
+  background: color-mix(in srgb, var(--color-surface) 35%, var(--color-paper));
+}
+.gp-upload-brand-panel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 90% at 50% 28%,
+    var(--color-paper) 0%,
+    var(--color-surface) 48%,
+    var(--color-surface-2) 100%
+  );
+}
+.gp-upload-brand-panel__backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(0deg, rgba(10, 10, 10, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(10, 10, 10, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(80% 70% at 50% 45%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(80% 70% at 50% 45%, #000 30%, transparent 78%);
+}
+.dark .gp-upload-brand-panel__backdrop::before {
+  background-image:
+    linear-gradient(0deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+.gp-upload-brand-panel__backdrop::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 68%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0));
+}
+.dark .gp-upload-brand-panel__backdrop::after {
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
 }
 
 /* Upload — primary digitize CTA */
@@ -1426,6 +1760,32 @@ h1, h2, h3, h4 {
   position: relative;
 }
 
+/* Review workspace — board must keep size even when flex parent height is unset */
+.gp-review-board-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: clamp(240px, 42vmin, 560px);
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 1024px) {
+  .gp-review-board-body {
+    min-height: 0;
+  }
+}
+
+.gp-review-board-body .gp-chess-board {
+  width: min(100%, clamp(240px, 72vmin, 560px));
+  max-width: 100%;
+}
+
+.gp-review-board-body .gp-chess-board__surface {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
 .gp-account-hero {
   position: relative;
   overflow: hidden;
@@ -1536,3 +1896,720 @@ h1, h2, h3, h4 {
 .gp-history-row:hover {
   background: color-mix(in srgb, var(--color-surface-2) 65%, transparent);
 }
+
+/* Account settings — premium page shell */
+.gp-account-page {
+  position: relative;
+}
+.gp-account-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 90% 50% at 50% -10%,
+      color-mix(in srgb, var(--color-ink) 4%, transparent),
+      transparent 55%
+    );
+}
+
+.gp-account-page-header {
+  position: relative;
+}
+
+.gp-premium-panel-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+  background: color-mix(in srgb, var(--color-surface-2) 40%, transparent);
+  padding: 0.875rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.gp-premium-panel-head h2,
+.gp-premium-panel-head h3 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.gp-account-hero .gp-scan-ring {
+  --ring-track: color-mix(in srgb, var(--color-paper) 18%, transparent);
+  --ring-fill: var(--color-paper);
+  --ring-text: var(--color-paper);
+  --ring-sub: color-mix(in srgb, var(--color-paper) 55%, transparent);
+}
+.gp-account-hero-soft .gp-scan-ring,
+.gp-scan-ring {
+  --ring-track: color-mix(in srgb, var(--color-line) 80%, transparent);
+  --ring-fill: var(--color-ink);
+  --ring-text: var(--color-ink);
+  --ring-sub: var(--color-muted);
+}
+
+.gp-scan-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4.75rem;
+  height: 4.75rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: conic-gradient(
+    var(--ring-fill) calc(var(--scan-pct, 0) * 1%),
+    var(--ring-track) 0
+  );
+}
+.gp-scan-ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 9999px;
+  background: var(--color-paper);
+}
+.gp-account-hero .gp-scan-ring::before {
+  background: var(--color-ink);
+}
+.gp-account-hero-soft .gp-scan-ring::before {
+  background: var(--color-paper);
+}
+.gp-scan-ring__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+.gp-scan-ring__value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ring-text);
+}
+.gp-scan-ring__label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ring-sub);
+}
+
+.gp-account-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.gp-account-badge--pro {
+  background: color-mix(in srgb, var(--color-paper) 14%, transparent);
+  color: var(--color-paper);
+  border: 1px solid color-mix(in srgb, var(--color-paper) 22%, transparent);
+}
+.gp-account-badge--free {
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  border: 1px solid var(--color-line-strong);
+}
+
+.gp-referral-code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+}
+
+.gp-premium-panel-subhead {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 50%, transparent);
+  background: color-mix(in srgb, var(--color-surface-2) 30%, transparent);
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.gp-premium-panel-subhead h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.gp-account-upgrade-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--color-surface) 70%, var(--color-paper)) 0%,
+      var(--color-paper) 50%
+    );
+  box-shadow: var(--shadow-pop);
+}
+.gp-account-upgrade-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 70% at 100% 0%,
+    color-mix(in srgb, var(--color-ink) 5%, transparent),
+    transparent 60%
+  );
+  pointer-events: none;
+}
+.gp-account-upgrade-card__glow {
+  position: absolute;
+  left: -2rem;
+  bottom: -2rem;
+  height: 8rem;
+  width: 8rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink) 4%, transparent);
+  filter: blur(32px);
+  pointer-events: none;
+}
+
+.gp-copy-btn {
+  display: inline-flex;
+  shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  transition: background-color 0.15s ease;
+}
+.gp-copy-btn:hover {
+  background: var(--color-surface-2);
+}
+
+/* Account — Cal.com-inspired settings layout */
+.gp-account-cal {
+  width: 100%;
+}
+
+.gp-account-cal-greeting {
+  text-transform: none;
+  letter-spacing: -0.03em;
+}
+.gp-account-cal-greeting__title {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-ink);
+}
+.gp-account-cal-greeting__desc {
+  margin-top: 0.35rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.gp-account-cal-aside-user {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.gp-account-cal-aside-user__name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+.gp-account-cal-aside-user__meta {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.gp-account-cal-nav {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.gp-account-cal-nav::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 768px) {
+  .gp-account-cal-nav {
+    flex-direction: column;
+    overflow: visible;
+    gap: 0.125rem;
+  }
+}
+
+.gp-account-cal-nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-muted);
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.gp-account-cal-nav__link:hover {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-surface) 65%, transparent);
+}
+.gp-account-cal-nav__link--active {
+  color: var(--color-ink);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-paper));
+}
+
+.gp-account-cal-section {
+  border-top: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+}
+.gp-account-cal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding: 1.125rem 0;
+}
+.gp-account-cal-row + .gp-account-cal-row {
+  border-top: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+}
+.gp-account-cal-row__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+.gp-account-cal-row__hint {
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+.gp-account-cal-row__action {
+  flex-shrink: 0;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-muted);
+  background: transparent;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background-color 0.12s ease;
+}
+.gp-account-cal-row__action:hover {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-line) 80%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 50%, transparent);
+}
+
+.gp-account-cal-table-scroll {
+  scrollbar-gutter: stable;
+}
+.gp-account-cal-table {
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.gp-account-cal-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.5rem 0.75rem 0.625rem 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted-2);
+  background: var(--color-paper);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+}
+.gp-account-cal-table tbody td {
+  padding: 0.75rem 0.75rem 0.75rem 0;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 40%, transparent);
+}
+.gp-account-cal-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.gp-account-cal-table th:last-child,
+.gp-account-cal-table td:last-child {
+  padding-right: 0;
+}
+
+.gp-account-cal-usage {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+}
+.gp-account-cal-usage__bar {
+  height: 4px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-line) 55%, transparent);
+}
+.gp-account-cal-usage__fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  transition: width 0.35s ease;
+}
+
+.gp-account-hero-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--color-surface) 88%, var(--color-paper)) 0%,
+      var(--color-paper) 58%
+    );
+  box-shadow: var(--shadow-pop);
+}
+.gp-account-hero-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 75% 60% at 0% 0%,
+    color-mix(in srgb, var(--color-ink) 4%, transparent),
+    transparent 62%
+  );
+}
+
+.gp-account-scan-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+.gp-account-scan-strip__track {
+  height: 0.375rem;
+  flex: 1 1 12rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-line) 55%, transparent);
+}
+.gp-account-scan-strip__fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  transition: width 0.45s ease;
+}
+
+.gp-account-pill-nav {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 50%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 72%, var(--color-paper));
+}
+.gp-account-pill-nav__tab {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-muted);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.gp-account-pill-nav__tab:hover {
+  color: var(--color-ink);
+}
+.gp-account-pill-nav__tab--active {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-soft);
+}
+
+.gp-account-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0;
+}
+.gp-account-settings-row + .gp-account-settings-row {
+  border-top: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+}
+
+.gp-account-profile-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 35%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 72%, var(--color-paper));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 55%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 5%, transparent);
+}
+
+.gp-account-profile-hero__pattern {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(0deg, color-mix(in srgb, var(--color-ink) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-ink) 3%, transparent) 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, #000 20%, transparent 75%);
+}
+
+.gp-account-profile-hero__glow {
+  position: absolute;
+  left: 50%;
+  top: -20%;
+  height: 14rem;
+  width: 14rem;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-ink) 4%, transparent);
+  filter: blur(48px);
+  pointer-events: none;
+}
+
+.gp-account-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 40%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-paper));
+  padding: 0.25rem 0.65rem;
+  font-weight: 500;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-paper) 40%, transparent);
+}
+
+.gp-account-tabs {
+  scrollbar-width: none;
+}
+.gp-account-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.gp-account-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.gp-account-tab:hover {
+  color: var(--color-ink);
+}
+.gp-account-tab--active {
+  color: var(--color-ink);
+  border-bottom-color: var(--color-ink);
+}
+
+/* Sunken premium cards — inset, not raised boxes */
+.gp-account-sink-card,
+.gp-account-info-card {
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 35%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 78%, var(--color-paper));
+  padding: 1.125rem 1.25rem;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 50%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 4%, transparent);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.gp-account-sink-card:hover,
+.gp-account-info-card:hover {
+  border-color: color-mix(in srgb, var(--color-line) 55%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-paper));
+}
+
+.gp-account-sink-card__head,
+.gp-account-info-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.gp-account-sink-card__icon,
+.gp-account-info-card__icon {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-surface-2) 70%, var(--color-paper));
+  color: var(--color-muted);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-ink) 6%, transparent);
+}
+
+.gp-account-sink-card__label,
+.gp-account-info-card__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-muted-2);
+}
+
+.gp-account-sink-card__body,
+.gp-account-info-card__body {
+  min-width: 0;
+}
+
+.gp-account-sink-panel {
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 35%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 75%, var(--color-paper));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 5%, transparent);
+}
+
+.gp-account-sink-inset {
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-ink) 5%, transparent);
+}
+
+.gp-account-avatar-picker {
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 35%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 75%, var(--color-paper));
+  padding: 1rem;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 4%, transparent);
+}
+
+.gp-account-piece-tile {
+  border: 1px solid color-mix(in srgb, var(--color-line) 35%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-paper));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-ink) 5%, transparent);
+}
+
+.gp-account-piece-tile:hover {
+  border-color: color-mix(in srgb, var(--color-line) 55%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 85%, var(--color-paper));
+}
+
+.gp-account-piece-tile--active {
+  border-color: color-mix(in srgb, var(--color-ink) 18%, var(--color-line));
+  background: color-mix(in srgb, var(--color-surface-2) 80%, var(--color-paper));
+  box-shadow:
+    inset 0 2px 4px color-mix(in srgb, var(--color-ink) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-ink) 6%, transparent);
+}
+
+/* Cburnett piece icons (avatars, pickers) — matches board artwork */
+.gp-cburnett-icon.cg-wrap {
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+}
+
+.gp-cburnett-icon.cg-wrap piece {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
+}
+
+.gp-cburnett-icon.cg-wrap piece.white {
+  position: absolute;
+  inset: 0;
+}
+
+.dark .gp-cburnett-icon.cg-wrap piece {
+  filter: drop-shadow(0 1.5px 2px rgba(0, 0, 0, 0.45));
+}
+
+.gp-chess-avatar {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% 18%,
+      color-mix(in srgb, var(--color-paper) 90%, transparent),
+      color-mix(in srgb, var(--color-surface) 85%, var(--color-paper)) 55%,
+      color-mix(in srgb, var(--color-surface-2) 70%, var(--color-paper)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 70%, transparent),
+    inset 0 -2px 4px color-mix(in srgb, var(--color-ink) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-line) 70%, transparent);
+}
+
+.gp-chess-avatar[data-pro="true"] {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 70%, transparent),
+    inset 0 -2px 4px color-mix(in srgb, var(--color-ink) 8%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--color-ink) 22%, transparent);
+}
+
+.gp-saved-game-load-icon {
+  border: 1px solid color-mix(in srgb, var(--color-line) 45%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-paper));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 50%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 4%, transparent);
+}
+
+.dark .gp-account-profile-hero {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 8%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 20%, transparent);
+}
+
+.dark .gp-account-sink-card,
+.dark .gp-account-info-card,
+.dark .gp-account-sink-panel,
+.dark .gp-account-avatar-picker {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 6%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 25%, transparent);
+}
+
+.dark .gp-chess-avatar {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper) 10%, transparent),
+    inset 0 -2px 6px color-mix(in srgb, var(--color-ink) 35%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-line) 80%, transparent);
+}
+

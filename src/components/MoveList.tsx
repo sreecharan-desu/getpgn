@@ -1,12 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Play,
-  Pause,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronDown,
   AlertCircle,
   Info,
   Pencil,
@@ -16,6 +9,8 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
 } from 'lucide-react';
+import { ReplayControls } from '@/components/ReplayControls';
+import { useReplayPlayback, type ReplayPlaybackControls } from '@/hooks/useReplayPlayback';
 
 export interface MoveState {
   original: string;
@@ -63,6 +58,10 @@ interface MoveListProps {
   readOnly?: boolean;
   /** Public share page: match dashboard playback bar at the top. */
   shareReplay?: boolean;
+  /** Optional external playback state (e.g. board overlay on mobile). */
+  playback?: ReplayPlaybackControls;
+  /** Extra classes on the desktop playback bar (e.g. hide on mobile). */
+  playbackBarClassName?: string;
 }
 
 const moveColor = (status: Status) =>
@@ -90,9 +89,9 @@ export const MoveList: React.FC<MoveListProps> = ({
   onConsumePendingEdit,
   readOnly = false,
   shareReplay = false,
+  playback: externalPlayback,
+  playbackBarClassName = '',
 }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playSpeed, setPlaySpeed] = useState(1000);
   const [viewMode, setViewMode] = useState<'list' | 'text'>('list');
   const [textDraft, setTextDraft] = useState('');
   const [editing, setEditing] = useState<number | null>(null); // ply index (1-based)
@@ -116,16 +115,13 @@ export const MoveList: React.FC<MoveListProps> = ({
   const controlsPlacement: 'top' | 'share' =
     readOnly && !shareReplay ? 'share' : 'top';
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        if (currentPlyIndex < totalPlies) onSelectPly(currentPlyIndex + 1);
-        else setIsPlaying(false);
-      }, playSpeed);
-    }
-    return () => { if (interval) clearInterval(interval); };
-  }, [isPlaying, currentPlyIndex, totalPlies, playSpeed, onSelectPly]);
+  const internalPlayback = useReplayPlayback({
+    currentPlyIndex,
+    totalPlies,
+    onSelectPly,
+  });
+  const playback = externalPlayback ?? internalPlayback;
+  const isPlaying = playback.isPlaying;
 
   useEffect(() => {
     if (!isPlaying || currentPlyIndex === 0) return;
@@ -196,27 +192,11 @@ export const MoveList: React.FC<MoveListProps> = ({
 
   const selectPly = useCallback(
     (plyIndex: number) => {
-      setIsPlaying(false);
+      playback.stopPlaying();
       onSelectPly(plyIndex);
     },
-    [onSelectPly],
+    [onSelectPly, playback],
   );
-
-  const handleFirst = () => selectPly(0);
-  const handlePrev = () => { if (currentPlyIndex > 0) selectPly(currentPlyIndex - 1); };
-  const handleNext = () => { if (currentPlyIndex < totalPlies) selectPly(currentPlyIndex + 1); };
-  const handleLast = () => selectPly(totalPlies);
-
-  const togglePlay = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-      return;
-    }
-    if (currentPlyIndex >= totalPlies) {
-      onSelectPly(0);
-    }
-    setIsPlaying(true);
-  };
 
   const startEdit = useCallback((ply: Ply) => {
     if (!editable) return;
@@ -365,69 +345,16 @@ export const MoveList: React.FC<MoveListProps> = ({
     );
   };
 
-  const playbackBar = (placement: 'top' | 'share') => {
-    const showPlay = placement === 'top';
-    return (
-      <div className={`flex flex-col gap-2.5 ${placement === 'top' ? 'border-b' : 'border-t'} border-line bg-surface px-4 py-3`}>
-        <div className="flex items-center justify-between text-[12px] text-muted gp-nums">
-          <span>Position {currentPlyIndex} / {totalPlies}</span>
-          {showPlay && (
-            <div className="relative shrink-0">
-              <select
-                value={playSpeed}
-                onChange={(e) => setPlaySpeed(Number(e.target.value))}
-                aria-label="Playback speed"
-                className="h-8 min-w-[7.25rem] cursor-pointer appearance-none rounded-lg border border-line-strong bg-paper pl-2.5 pr-8 text-[12px] font-medium text-ink outline-none transition-colors hover:border-muted-2 focus:border-ink"
-              >
-                <option value={500}>Fast · 0.5s</option>
-                <option value={1000}>Normal · 1s</option>
-                <option value={2000}>Slow · 2s</option>
-              </select>
-              <ChevronDown
-                className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"
-                aria-hidden="true"
-              />
-            </div>
-          )}
-        </div>
-        <div className="h-1 overflow-hidden rounded-full bg-surface-2">
-          <div className="h-full rounded-full bg-ink transition-all duration-200" style={{ width: totalPlies ? `${(currentPlyIndex / totalPlies) * 100}%` : '0%' }} />
-        </div>
-
-        <div className="flex items-center justify-center gap-1.5">
-          {[
-            { icon: <ChevronsLeft className="h-4 w-4" />, action: handleFirst, disabled: currentPlyIndex === 0, title: 'First' },
-            { icon: <ChevronLeft className="h-4 w-4" />, action: handlePrev, disabled: currentPlyIndex === 0, title: 'Previous' },
-          ].map((btn, i) => (
-            <button key={i} onClick={btn.action} disabled={btn.disabled} title={btn.title} aria-label={btn.title}
-              className="grid h-9 w-9 cursor-pointer place-items-center rounded-[8px] border border-line-strong bg-paper text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-paper">
-              {btn.icon}
-            </button>
-          ))}
-          {showPlay && (
-            <button
-              onClick={togglePlay}
-              disabled={totalPlies === 0}
-              className={`flex h-9 cursor-pointer items-center gap-2 rounded-[8px] px-5 text-[13px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
-                isPlaying ? 'bg-ink text-paper hover:bg-ink-soft' : 'border border-line-strong bg-paper text-ink hover:bg-surface-2'
-              }`}
-            >
-              {isPlaying ? (<><Pause className="h-4 w-4 fill-current" /> Pause</>) : (<><Play className="h-4 w-4 fill-current" /> Play</>)}
-            </button>
-          )}
-          {[
-            { icon: <ChevronRight className="h-4 w-4" />, action: handleNext, disabled: currentPlyIndex === totalPlies, title: 'Next' },
-            { icon: <ChevronsRight className="h-4 w-4" />, action: handleLast, disabled: currentPlyIndex === totalPlies, title: 'Last' },
-          ].map((btn, i) => (
-            <button key={i} onClick={btn.action} disabled={btn.disabled} title={btn.title} aria-label={btn.title}
-              className="grid h-9 w-9 cursor-pointer place-items-center rounded-[8px] border border-line-strong bg-paper text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-paper">
-              {btn.icon}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  };
+  const playbackBar = (placement: 'top' | 'share') => (
+    <ReplayControls
+      {...playback}
+      currentPlyIndex={currentPlyIndex}
+      totalPlies={totalPlies}
+      variant="panel"
+      showPlay={placement === 'top'}
+      className={`${placement === 'top' ? 'border-b' : 'border-t'} ${playbackBarClassName}`}
+    />
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[14px] border border-line bg-paper text-ink">
@@ -449,21 +376,23 @@ export const MoveList: React.FC<MoveListProps> = ({
             ))}
           </div>
         </div>
-        {(turns.length > 0 || flaggedCount > 0) && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {turns.length > 0 && (
-              <span className="chip gp-nums whitespace-nowrap text-[11px]">
-                {turns.length} turns
-              </span>
-            )}
-            {flaggedCount > 0 && (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-warn-bg px-2 py-0.5 text-[11px] font-medium text-warn">
-                <AlertCircle className="h-3 w-3 shrink-0" />
-                {flaggedCount} to fix
-              </span>
-            )}
-          </div>
-        )}
+        <div className="flex min-h-[26px] flex-wrap items-center gap-1.5">
+          <span
+            className={`chip gp-nums whitespace-nowrap text-[11px] ${
+              turns.length === 0 ? "invisible" : ""
+            }`}
+          >
+            {turns.length || 0} turns
+          </span>
+          <span
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-warn-bg px-2 py-0.5 text-[11px] font-medium text-warn ${
+              flaggedCount === 0 ? "invisible" : ""
+            }`}
+          >
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            {flaggedCount || 0} to fix
+          </span>
+        </div>
       </div>
 
       {/* Playback Controls (dashboard: pinned to the top, above the move table) */}

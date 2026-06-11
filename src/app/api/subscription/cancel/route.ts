@@ -6,6 +6,7 @@ import {
   PAYMENTS_UNAVAILABLE,
   readRazorpayConfig,
 } from '@/lib/razorpayServer';
+import { queueProSubscriptionEmail } from '@/lib/notificationEmail';
 
 export async function POST() {
   try {
@@ -41,6 +42,20 @@ export async function POST() {
     });
 
     console.log(`[Cancel Subscription] User ${user.username} cancelled subscription ${user.subscriptionId}.`);
+
+    if (user.email) {
+      queueProSubscriptionEmail(user.email, {
+        username: user.username,
+        planType:
+          user.subscriptionPlan === 'enterprise'
+            ? 'enterprise'
+            : user.subscriptionPlan === 'yearly'
+              ? 'yearly'
+              : 'monthly',
+        event: 'cancelled',
+        subscriptionEnd: updatedUser.subscriptionEnd,
+      });
+    }
 
     return NextResponse.json({
       success: true,

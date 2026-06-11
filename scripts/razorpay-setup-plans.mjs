@@ -4,8 +4,9 @@
  *
  * Usage (from repo root, with .env loaded):
  *   node --env-file=.env scripts/razorpay-setup-plans.mjs
+ *   node --env-file=.env scripts/razorpay-setup-plans.mjs --enterprise-only
  *
- * Prints plan ids to set as RAZORPAY_MONTHLY_PLAN_ID and RAZORPAY_YEARLY_PLAN_ID.
+ * Prints plan ids to set as RAZORPAY_*_PLAN_ID env vars.
  */
 import Razorpay from 'razorpay';
 
@@ -24,7 +25,15 @@ const PLAN_SPECS = {
     amountPaise: 100_000,
     currency: 'INR',
     name: 'GetPGN Pro Yearly',
-    description: '₹1,000/year · 1,200 scans/year',
+    description: '₹1,000/year · 1,000 scans/year',
+  },
+  enterprise: {
+    period: 'yearly',
+    interval: 1,
+    amountPaise: 400_000,
+    currency: 'INR',
+    name: 'GetPGN Enterprise',
+    description: '₹4,000/year · 1,000 scans · organizer library',
   },
 };
 
@@ -66,17 +75,31 @@ async function createPlan(planType) {
   return plan;
 }
 
+const enterpriseOnly = process.argv.includes('--enterprise-only');
+
 async function main() {
   console.log(`Razorpay mode: ${keyId.startsWith('rzp_live_') ? 'live' : 'test'}\n`);
 
+  if (enterpriseOnly) {
+    const enterprise = await createPlan('enterprise');
+    console.log('Created Enterprise plan:\n');
+    console.log(`RAZORPAY_ENTERPRISE_PLAN_ID=${enterprise.id}`);
+    console.log(`  period=${enterprise.period} interval=${enterprise.interval} amount=${enterprise.item?.amount}`);
+    console.log('\nAdd RAZORPAY_ENTERPRISE_PLAN_ID to .env and Vercel, then redeploy.');
+    return;
+  }
+
   const monthly = await createPlan('monthly');
   const yearly = await createPlan('yearly');
+  const enterprise = await createPlan('enterprise');
 
   console.log('Created plans:\n');
   console.log(`RAZORPAY_MONTHLY_PLAN_ID=${monthly.id}`);
   console.log(`  period=${monthly.period} interval=${monthly.interval} amount=${monthly.item?.amount}`);
   console.log(`RAZORPAY_YEARLY_PLAN_ID=${yearly.id}`);
   console.log(`  period=${yearly.period} interval=${yearly.interval} amount=${yearly.item?.amount}`);
+  console.log(`RAZORPAY_ENTERPRISE_PLAN_ID=${enterprise.id}`);
+  console.log(`  period=${enterprise.period} interval=${enterprise.interval} amount=${enterprise.item?.amount}`);
   console.log('\nAdd these to Vercel env (production) and redeploy.');
 }
 

@@ -24,13 +24,18 @@ export function resolveIsDark(preference: ThemePreference): boolean {
   return getSystemIsDark();
 }
 
+const THEME_TRANSITION_MS = 320;
+
 export function applyThemeToDocument(isDark: boolean, options?: { transition?: boolean }) {
   const root = document.documentElement;
   if (options?.transition) {
     root.classList.add('theme-transition');
-    window.setTimeout(() => root.classList.remove('theme-transition'), 260);
+    void root.offsetWidth;
   }
   root.classList.toggle('dark', isDark);
+  if (options?.transition) {
+    window.setTimeout(() => root.classList.remove('theme-transition'), THEME_TRANSITION_MS);
+  }
 }
 
 export function applyThemePreference(preference: ThemePreference, options?: { transition?: boolean }) {

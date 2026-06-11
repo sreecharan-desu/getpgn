@@ -10,24 +10,28 @@ interface PricingModalProps {
   open: boolean;
   onClose: () => void;
   scanCount: number;
+  scanLimit?: number;
   isPro: boolean;
   billingLoading: boolean;
-  initialInterval?: "monthly" | "yearly";
+  initialInterval?: "monthly" | "yearly" | "enterprise";
   /** Shown when resubscribing during cancelled grace (mandate-only checkout). */
   mandateNotice?: string | null;
   onSelectMonthly: () => void;
   onSelectYearly: () => void;
+  onSelectEnterprise: () => void;
 }
 
 export function PricingModal({
   open,
   onClose,
   scanCount,
+  scanLimit = FREE_SCAN_LIMIT,
   isPro,
   billingLoading,
   mandateNotice,
   onSelectMonthly,
   onSelectYearly,
+  onSelectEnterprise,
 }: PricingModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -37,8 +41,8 @@ export function PricingModal({
 
   if (!open) return null;
 
-  const scansLeft = Math.max(0, FREE_SCAN_LIMIT - scanCount);
-  const scansExhausted = scanCount >= FREE_SCAN_LIMIT;
+  const scansLeft = Math.max(0, scanLimit - scanCount);
+  const scansExhausted = scanCount >= scanLimit;
 
   const scanBadge =
     !isPro ? (
@@ -95,9 +99,9 @@ export function PricingModal({
               presentation="modal"
               checkoutMode
               billingLoading={billingLoading}
-              showCurrentFreePlan
               onCheckoutMonthly={onSelectMonthly}
               onCheckoutYearly={onSelectYearly}
+              onCheckoutEnterprise={onSelectEnterprise}
               headerExtra={scanBadge}
             />
           </div>

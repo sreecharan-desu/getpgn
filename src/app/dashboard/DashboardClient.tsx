@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Chess } from "chess.js";
 import { toast } from "sonner";
+import { appToast } from "@/lib/appToast";
 import { ImageUpload } from "@/components/ImageUpload";
 import {
   ChessBoard,
@@ -23,8 +24,11 @@ import {
 import { Logo } from "@/components/ui/Logo";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FeedbackModal } from "@/components/ui/FeedbackModal";
-import { UserAvatar } from "@/components/ui/UserAvatar";
 import { UserMenu } from "@/components/ui/UserMenu";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useReplayPlayback } from "@/hooks/useReplayPlayback";
+import { ReplayControls } from "@/components/ReplayControls";
+import { AccountScreen } from "@/components/dashboard/AccountScreen";
 import { LegalLink, LegalTrustLinks } from "@/components/legal/PolicyFooter";
 import { LEGAL } from "@/lib/legal";
 import BoardThumbnail from "@/components/ui/BoardThumbnail";
@@ -36,7 +40,6 @@ import {
 import { getTimeGreeting } from "@/lib/greeting";
 import { forceLogout } from "@/lib/clientStorage";
 import { Spinner } from "@/components/ui/Spinner";
-import { IconInput } from "@/components/ui/IconInput";
 import { BillingRowSkeleton } from "@/components/ui/Skeleton";
 import {
   SidebarRestoreSkeleton,
@@ -49,42 +52,57 @@ import {
 } from "@/components/dashboard/FreePlanUI";
 import { PricingModal } from "@/components/dashboard/PricingModal";
 import { ExtractingOverlay } from "@/components/dashboard/ExtractingOverlay";
+import { SavedGameLoadingOverlay } from "@/components/dashboard/SavedGameLoadingOverlay";
+import { WorkspaceLeavingOverlay } from "@/components/dashboard/WorkspaceLeavingOverlay";
+import { ReferralNudge } from "@/components/referrals/ReferralNudge";
+import {
+  InfiniteScrollSentinel,
+  shouldLoadMoreFromScroll,
+} from "@/components/dashboard/InfiniteScrollSentinel";
+import { useSavedGamesPagination } from "@/hooks/useSavedGamesPagination";
+import {
+  useOrganizerPurchasesPagination,
+  type OrganizerPurchaseRow,
+} from "@/hooks/useOrganizerPurchasesPagination";
+import { PrepaidPurchaseHistoryTable } from "@/components/dashboard/PrepaidPurchaseHistoryTable";
+import { UploadBrandingAside } from "@/components/dashboard/UploadBrandingAside";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { GamesLibrarySearchBar } from "@/components/dashboard/GamesLibrarySearchBar";
+import {
+  GameMetadataEditDialog,
+  type GameMetadataValues,
+} from "@/components/dashboard/GameMetadataEditDialog";
+import {
+  displayPlayerName,
+  injectPlayerNamesIntoPgn,
+  isDefaultPlayerName,
+  parseMetadataFromPgn,
+} from "@/lib/playerNames";
 import { SoundToggle } from "@/components/ui/SoundToggle";
 import { useChessPlySounds } from "@/hooks/useChessPlySounds";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 import { SiLichess, SiChessdotcom } from "react-icons/si";
 import {
   Sparkles,
   AlertCircle,
   HelpCircle,
   BookOpen,
-  Image as ImageIcon,
   History,
   Lock,
   LogOut,
   Plus,
   Check,
-  Copy,
-  Trash2,
-  X,
   Share2,
   Infinity as InfinityIcon,
-  ShieldCheck,
-  CreditCard,
-  Receipt,
-  CalendarDays,
   ArrowUpRight,
-  Star,
   Upload,
   ArrowLeft,
   ArrowRight,
   User,
-  KeyRound,
-  RotateCw,
+  ArrowLeftRight,
+  Pencil,
   MessageSquare,
-  LayoutGrid,
   Download,
-  Search,
   // Pause,
   // Play,
 } from "lucide-react";
@@ -101,10 +119,47 @@ import {
   formatProScanAllowance,
   getScanPeriodKey,
   getScanUsage,
+  getDisplayScanUsage,
 } from "@/lib/scanLimits";
-import { isProUser } from "@/lib/proAccess";
-import { filterSavedGames } from "@/lib/savedGameSearch";
+import {
+  getSubscriptionAmount,
+  getSubscriptionBillingLabel,
+  getSubscriptionPlanShort,
+} from "@/lib/billingDisplay";
+import {
+  isEnterpriseUser,
+  isEnterpriseBranded,
+  isProUser,
+  hasPremiumAccess,
+} from "@/lib/proAccess";
+import {
+  hasOrganizerWallet,
+  type OrganizerAccountSnapshot,
+} from "@/lib/organizerWallet";
+import { OrganizerCreditsPanel } from "@/components/dashboard/OrganizerCreditsPanel";
 import { validateChessMoves } from "@/lib/chess-validator";
+import { debugLog } from "@/lib/debug";
+import { resetBodyScroll } from "@/lib/bodyScrollLock";
+import { formatScanRemaining } from "@/lib/formatScanCount";
+import type { WorkspaceView } from "@/lib/workspacePageData";
+
+/** True when localStorage has a review workspace worth restoring before paint. */
+function workspaceNeedsRestore(userId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(`getpgn:workspace:${userId}`);
+    if (!raw) return false;
+    const snap = JSON.parse(raw);
+    if (snap?.appState === "extracting") return false;
+    return (
+      snap?.appState === "review" &&
+      Array.isArray(snap.turns) &&
+      snap.turns.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
 
 /** Convert pasted PGN or movetext into the raw {moveNumber, white, black} shape the validator expects. */
 function pgnToRawMoves(
@@ -160,6 +215,8 @@ function originalsToRaw(
 interface SavedGame {
   id: string;
   title: string;
+  whitePlayer?: string;
+  blackPlayer?: string;
   pgn?: string;
   movesJson?: string;
   createdAt: string;
@@ -173,8 +230,11 @@ interface User {
   id: string;
   username: string;
   email?: string | null;
-  plan: "FREE" | "PAID";
+  avatarPiece?: string | null;
+  createdAt?: string | null;
+  plan: "FREE" | "PAID" | "ENTERPRISE";
   scanCount: number;
+  bonusScanCount?: number;
   monthlyScanCount: number;
   monthlyScanMonth: string | null;
   subscriptionId?: string | null;
@@ -188,7 +248,14 @@ interface User {
 interface DashboardClientProps {
   initialUser: User;
   initialGames: SavedGame[];
+  initialGamesTotal: number;
   isDevMode: boolean;
+  initialOrganizerAccount?: OrganizerAccountSnapshot | null;
+  initialOrganizerPurchases?: OrganizerPurchaseRow[];
+  initialOrganizerPurchasesTotal?: number;
+  initialReferralBonusNotice?: { referrerUsername: string; rewardScans: number } | null;
+  workspaceView?: WorkspaceView;
+  initialGameId?: string;
 }
 
 /** True only for verified Razorpay subscriptions — hides dev/simulated IDs. */
@@ -220,28 +287,8 @@ function formatGameDate(iso: string): string {
   return `${GAME_DATE_MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-function computeMoveStats(turns: Turn[]) {
-  let valid = 0;
-  let flagged = 0;
-  let totalPlies = 0;
-  for (const turn of turns) {
-    for (const ply of [turn.white, turn.black]) {
-      totalPlies++;
-      if (ply.status === "valid") valid++;
-      else if (ply.status === "ambiguous" || ply.status === "illegal")
-        flagged++;
-    }
-  }
-  return { turnCount: turns.length, totalPlies, valid, flagged };
-}
-
 /** Shared horizontal rhythm — keeps dashboard readable on wide screens. */
 const DASHBOARD_SHELL = "mx-auto w-full max-w-6xl";
-/** Account settings — slightly wider so forms breathe on large displays. */
-const ACCOUNT_SHELL = "mx-auto w-full max-w-7xl 2xl:max-w-[1320px]";
-const PREMIUM_PANEL = "gp-premium-panel";
-const PREMIUM_PANEL_HEAD =
-  "border-b border-line/60 bg-surface-2/35 px-4 sm:px-5 py-3.5 flex items-center gap-2 shrink-0";
 /** Abort extraction if the API does not respond (prevents infinite overlay). */
 const EXTRACT_TIMEOUT_MS = 180_000;
 /** Narrow centered column for upload focus. */
@@ -251,28 +298,82 @@ const uploadShell = (wide?: boolean) => (wide ? "w-full" : UPLOAD_FOCUS);
 export default function DashboardClient({
   initialUser,
   initialGames,
+  initialGamesTotal = 0,
   isDevMode,
+  initialOrganizerAccount = null,
+  initialOrganizerPurchases = [],
+  initialOrganizerPurchasesTotal = 0,
+  initialReferralBonusNotice = null,
+  workspaceView = "upload",
+  initialGameId,
 }: DashboardClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User>(initialUser);
-  const [games, setGames] = useState<SavedGame[]>(initialGames);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "account">(
-    "dashboard",
-  );
+  const [gameSearchInput, setGameSearchInput] = useState("");
+  const debouncedGameSearch = useDebouncedValue(gameSearchInput, 400);
+  const [accountTab, setAccountTab] = useState<
+    "profile" | "security" | "billing" | "referrals"
+  >("profile");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (
+      tab === "profile" ||
+      tab === "security" ||
+      tab === "billing" ||
+      tab === "referrals"
+    ) {
+      setAccountTab(tab);
+    }
+  }, [searchParams]);
   const [showPricingModal, setShowPricingModal] = useState<boolean>(false);
   const [pricingInitialInterval, setPricingInitialInterval] = useState<
-    "monthly" | "yearly"
+    "monthly" | "yearly" | "enterprise"
   >("yearly");
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   // const [showPauseConfirm, setShowPauseConfirm] = useState<boolean>(false);
-  const [pendingDelete, setPendingDelete] = useState<SavedGame | null>(null);
-  const [deleting, setDeleting] = useState<boolean>(false);
+  const [loadingSavedGame, setLoadingSavedGame] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
-  const [gameSearchQuery, setGameSearchQuery] = useState("");
+  const sidebarGamesScrollRef = useRef<HTMLDivElement>(null);
+  const uploadGamesScrollRef = useRef<HTMLDivElement>(null);
+  const referralBonusNoticeShownRef = useRef(false);
   const reduceMotion = useReducedMotion();
 
+  const showReferralBonusToast = useCallback(
+    (notice: { referrerUsername: string; rewardScans: number }) => {
+      if (referralBonusNoticeShownRef.current) return;
+      referralBonusNoticeShownRef.current = true;
+      toast.success(
+        `You got ${notice.rewardScans} extra scans because @${notice.referrerUsername} invited you!`,
+        { duration: 6000 },
+      );
+      void fetch("/api/referral/ack-bonus", { method: "POST" }).catch(
+        () => undefined,
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (initialReferralBonusNotice) {
+      showReferralBonusToast(initialReferralBonusNotice);
+    }
+  }, [initialReferralBonusNotice, showReferralBonusToast]);
+
+  const [organizerAccount, setOrganizerAccount] = useState(
+    initialOrganizerAccount,
+  );
+
   const isPro = isProUser(user);
+  const isEnterprise = isEnterpriseUser(user);
+  const isEnterpriseDisplay = isEnterpriseBranded(user, organizerAccount);
+  const hasOrganizerWalletAccess = hasOrganizerWallet(organizerAccount);
+  const isPremium = hasPremiumAccess(user, organizerAccount);
 
   const deferredResubscribeAt = useMemo(() => {
     if (
@@ -289,17 +390,87 @@ export default function DashboardClient({
     ? getDeferredMandateNotice(deferredResubscribeAt)
     : null;
 
-  const scanUsage = getScanUsage(user);
+  const scanUsage = getDisplayScanUsage(user, new Date(), organizerAccount);
   const scansExhausted = scanUsage.exhausted;
-  const filteredGames = useMemo(
-    () => filterSavedGames(games, gameSearchQuery),
-    [games, gameSearchQuery],
+  const showFreeReferralPromo = !isPremium;
+  const referralPromoLowScans =
+    showFreeReferralPromo &&
+    (scansExhausted || scanUsage.remaining <= 1);
+
+  const openAccountReferrals = () => {
+    setAccountTab("referrals");
+    router.push("/account?tab=referrals");
+  };
+
+  const {
+    games,
+    setGames,
+    total: gamesTotal,
+    setTotal: setGamesTotal,
+    hasMore: gamesHasMore,
+    loadingMore: gamesLoadingMore,
+    searchLoading: gamesSearchLoading,
+    loadMore: loadMoreGames,
+  } = useSavedGamesPagination({
+    initialGames,
+    initialTotal: initialGamesTotal,
+    enabled: isPremium,
+    searchQuery: debouncedGameSearch,
+  });
+
+  const {
+    purchases: organizerPurchases,
+    total: organizerPurchasesTotal,
+    hasMore: organizerPurchasesHasMore,
+    loadingMore: organizerPurchasesLoadingMore,
+    loadMore: loadMoreOrganizerPurchases,
+  } = useOrganizerPurchasesPagination({
+    initialPurchases: initialOrganizerPurchases,
+    initialTotal: initialOrganizerPurchasesTotal,
+    enabled: hasOrganizerWalletAccess,
+  });
+
+  const filteredGames = games;
+
+  const upsertGameInLibraryList = useCallback(
+    (game: SavedGame) => {
+      setGames((prev) => {
+        if (prev.some((g) => g.id === game.id)) {
+          return prev.map((g) => (g.id === game.id ? game : g));
+        }
+        setGamesTotal((t) => t + 1);
+        return [game, ...prev];
+      });
+    },
+    [setGames, setGamesTotal],
+  );
+
+  const isSearchPending =
+    gameSearchInput.trim() !== debouncedGameSearch.trim();
+  const isGamesSearchBusy = gamesSearchLoading || isSearchPending;
+
+  const handleGamesListScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (!gamesHasMore || gamesLoadingMore || isGamesSearchBusy) return;
+      if (shouldLoadMoreFromScroll(e.currentTarget)) {
+        void loadMoreGames();
+      }
+    },
+    [gamesHasMore, gamesLoadingMore, isGamesSearchBusy, loadMoreGames],
   );
 
   // App view state
   const [appState, setAppState] = useState<"upload" | "extracting" | "review">(
-    "upload",
+    () => (workspaceView === "game" ? "review" : "upload"),
   );
+  const isPinnedWorkspace =
+    workspaceView === "game" || appState === "review";
+  const isAccountView = workspaceView === "account";
+
+  useEffect(() => {
+    if (!isAccountView) return;
+    resetBodyScroll();
+  }, [isAccountView]);
   const [pgnText, setPgnText] = useState("");
   const [validationSessionToken, setValidationSessionToken] = useState<
     string | null
@@ -312,6 +483,12 @@ export default function DashboardClient({
   const [pgn, setPgn] = useState<string>("");
   const [gameIsValid, setGameIsValid] = useState<boolean>(false);
   const [currentPlyIndex, setCurrentPlyIndex] = useState<number>(0);
+  const totalReplayPlies = useMemo(() => turns.length * 2, [turns.length]);
+  const replayPlayback = useReplayPlayback({
+    currentPlyIndex,
+    totalPlies: totalReplayPlies,
+    onSelectPly: setCurrentPlyIndex,
+  });
   const boardMoveInFlight = useRef(false);
   useChessPlySounds(
     turns,
@@ -319,20 +496,209 @@ export default function DashboardClient({
     appState === "review" && turns.length > 0,
   );
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
+  const [activeGameIsDraft, setActiveGameIsDraft] = useState(false);
   const [activeGameSharedSlug, setActiveGameSharedSlug] = useState<
     string | null
   >(null);
-  const [pendingEditPly, setPendingEditPly] = useState<number | null>(null);
+  const [savedGameSnapshot, setSavedGameSnapshot] = useState<{
+    pgn: string;
+    movesJson: string;
+  } | null>(null);
+  const [showDiscardUnsavedConfirm, setShowDiscardUnsavedConfirm] =
+    useState(false);
+  const [savingBeforeLeave, setSavingBeforeLeave] = useState(false);
+  const pendingAfterDiscardRef = useRef<(() => void) | null>(null);
+  const [isLeavingWorkspace, setIsLeavingWorkspace] = useState(false);
 
-  // Account settings (username / password) forms
-  const [usernameInput, setUsernameInput] = useState<string>(
-    initialUser.username,
+  const createTempScanDraft = useCallback(
+    async (pgnStr: string, moves: Turn[]) => {
+      if (!isPremium || !pgnStr || !moves.length) return;
+      try {
+        const res = await fetch("/api/games/scan-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pgn: pgnStr,
+            movesJson: JSON.stringify(moves),
+          }),
+        });
+        if (!res.ok) {
+          const apiErr = await readApiErrorOrLogout(
+            res,
+            "We couldn't prepare a share link for this scan.",
+          );
+          if (apiErr === null) return;
+          throw new Error(apiErr);
+        }
+        const data = await res.json();
+        const game = data.game as {
+          id: string;
+          title: string;
+          whitePlayer: string;
+          blackPlayer: string;
+          createdAt: string;
+        };
+        const slug = data.slug as string;
+        setActiveGameId(game.id);
+        setActiveGameIsDraft(true);
+        setActiveGameSharedSlug(slug);
+        setSavedGameSnapshot(null);
+      } catch (err) {
+        console.error("Temp scan draft failed:", err);
+      }
+    },
+    [isPremium],
   );
-  const [savingUsername, setSavingUsername] = useState<boolean>(false);
-  const [currentPassword, setCurrentPassword] = useState<string>("");
-  const [newPassword, setNewPassword] = useState<string>("");
-  const [confirmPassword, setConfirmPassword] = useState<string>("");
-  const [savingPassword, setSavingPassword] = useState<boolean>(false);
+
+  const discardActiveDraft = useCallback(async () => {
+    if (!activeGameId || !activeGameIsDraft) return;
+    try {
+      await fetch("/api/games/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gameId: activeGameId }),
+      });
+    } catch (err) {
+      console.error("Discard draft failed:", err);
+    }
+  }, [activeGameId, activeGameIsDraft]);
+
+  const gameHasUnsavedChanges = useMemo(() => {
+    if (!activeGameId || !pgn || appState !== "review") return false;
+    if (activeGameIsDraft) return true;
+    if (!savedGameSnapshot) return false;
+    return (
+      pgn !== savedGameSnapshot.pgn ||
+      JSON.stringify(turns) !== savedGameSnapshot.movesJson
+    );
+  }, [activeGameId, activeGameIsDraft, appState, pgn, turns, savedGameSnapshot]);
+
+  const withUnsavedGuard = useCallback(
+    (action: () => void) => {
+      if (gameHasUnsavedChanges && activeGameId && appState === "review") {
+        pendingAfterDiscardRef.current = action;
+        setShowDiscardUnsavedConfirm(true);
+        return;
+      }
+      action();
+    },
+    [activeGameId, appState, gameHasUnsavedChanges],
+  );
+
+  const returnToDashboard = useCallback(() => {
+    if (isLeavingWorkspace) return;
+    try {
+      localStorage.removeItem(`getpgn:workspace:${user.id}`);
+    } catch {
+      /* ignore */
+    }
+    setIsLeavingWorkspace(true);
+    router.push("/dashboard");
+  }, [isLeavingWorkspace, router, user.id]);
+
+  const goToDashboard = useCallback(() => {
+    if (workspaceView === "game") {
+      withUnsavedGuard(returnToDashboard);
+      return;
+    }
+    router.push("/dashboard");
+  }, [workspaceView, withUnsavedGuard, returnToDashboard, router]);
+
+  const goToAccount = () => router.push("/account");
+
+  const activeGame = useMemo(() => {
+    if (!activeGameId) return null;
+    return games.find((g) => g.id === activeGameId) ?? null;
+  }, [activeGameId, games]);
+  const [gameMetaOverrides, setGameMetaOverrides] = useState<
+    Partial<GameMetadataValues> | null
+  >(null);
+  const [showGameMetaEdit, setShowGameMetaEdit] = useState(false);
+  const [savingGameMeta, setSavingGameMeta] = useState(false);
+
+  const pgnGameMeta = useMemo(() => parseMetadataFromPgn(pgn), [pgn]);
+
+  const persistedGameMeta = useMemo(
+    (): GameMetadataValues => ({
+      title:
+        gameMetaOverrides?.title ??
+        activeGame?.title ??
+        pgnGameMeta.title ??
+        "Untitled game",
+      whitePlayer:
+        gameMetaOverrides?.whitePlayer ??
+        activeGame?.whitePlayer ??
+        pgnGameMeta.whitePlayer,
+      blackPlayer:
+        gameMetaOverrides?.blackPlayer ??
+        activeGame?.blackPlayer ??
+        pgnGameMeta.blackPlayer,
+    }),
+    [gameMetaOverrides, activeGame, pgnGameMeta],
+  );
+
+  const displayGameMeta = useMemo(
+    (): GameMetadataValues => ({
+      title: persistedGameMeta.title,
+      whitePlayer: displayPlayerName(persistedGameMeta.whitePlayer, "white"),
+      blackPlayer: displayPlayerName(persistedGameMeta.blackPlayer, "black"),
+    }),
+    [persistedGameMeta],
+  );
+
+  const editGameMetaInitial = useMemo(
+    (): GameMetadataValues => ({
+      title: persistedGameMeta.title,
+      whitePlayer: isDefaultPlayerName(persistedGameMeta.whitePlayer, "white")
+        ? ""
+        : persistedGameMeta.whitePlayer.trim(),
+      blackPlayer: isDefaultPlayerName(persistedGameMeta.blackPlayer, "black")
+        ? ""
+        : persistedGameMeta.blackPlayer.trim(),
+    }),
+    [persistedGameMeta],
+  );
+
+  const canEditGameMeta = isPremium && appState === "review" && turns.length > 0;
+
+  useEffect(() => {
+    setGameMetaOverrides(null);
+  }, [activeGameId]);
+
+  useEffect(() => {
+    if (!activeGameId || activeGame || !isPremium) return;
+    let cancelled = false;
+    void fetch(`/api/games/${activeGameId}`)
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<{ game?: SavedGame }>;
+      })
+      .then((data) => {
+        if (cancelled || !data?.game) return;
+        const game = data.game;
+        setGames((prev) => {
+          const next: SavedGame = {
+            id: game.id,
+            title: game.title,
+            whitePlayer: game.whitePlayer,
+            blackPlayer: game.blackPlayer,
+            pgn: game.pgn,
+            movesJson: game.movesJson,
+            createdAt: game.createdAt,
+            publicLink: game.publicLink ?? null,
+          };
+          if (prev.some((g) => g.id === game.id)) {
+            return prev.map((g) => (g.id === game.id ? { ...g, ...next } : g));
+          }
+          return [next, ...prev];
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGameId, activeGame, isPremium, setGames]);
+  const [pendingEditPly, setPendingEditPly] = useState<number | null>(null);
 
   // Loading & error states
   const [error, setError] = useState<string | null>(null);
@@ -345,13 +711,31 @@ export default function DashboardClient({
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
     "white",
   );
-  const [boardTheme, setBoardTheme] = useBoardTheme(!!isPro);
+  const boardTopPlayer =
+    boardOrientation === "white"
+      ? displayGameMeta.blackPlayer
+      : displayGameMeta.whitePlayer;
+  const boardBottomPlayer =
+    boardOrientation === "white"
+      ? displayGameMeta.whitePlayer
+      : displayGameMeta.blackPlayer;
+  const [boardTheme, setBoardTheme] = useBoardTheme(!!isPremium);
 
   useEffect(() => {
     void fetch("/api/auth/user").then(async (res) => {
       await forceLogoutIfUserNotFound(res);
     });
   }, []);
+
+  useEffect(() => {
+    const upgrade = searchParams.get("upgrade");
+    if (!upgrade || upgrade === "free") return;
+    if (upgrade === "monthly" || upgrade === "yearly" || upgrade === "enterprise") {
+      setPricingInitialInterval(upgrade);
+      setShowPricingModal(true);
+      router.replace("/dashboard", { scroll: false });
+    }
+  }, [searchParams, router]);
 
   // ─── Workspace session persistence (survive a page refresh) ──────────────
   // Snapshot the in-progress review workspace to localStorage so a refresh
@@ -364,21 +748,43 @@ export default function DashboardClient({
   // snapshot with the empty initial state before restore reads it — which would drop
   // the in-progress game on refresh and bounce the user back to the upload screen.
   const hasRestoredRef = useRef(false);
-  const boardCardRef = useRef<HTMLDivElement>(null);
-  const [boardCardHeight, setBoardCardHeight] = useState<number | null>(null);
-  // While false, show a workspace skeleton instead of the upload screen so a
-  // refresh on a saved game never flashes "Digitize your chess games" first.
-  const [workspaceReady, setWorkspaceReady] = useState(false);
+  // Default true so SSR shows the upload UI (not an infinite skeleton if client
+  // JS is slow or fails to hydrate). Only false when a review snapshot exists.
+  const [workspaceReady, setWorkspaceReady] = useState(
+    () => !workspaceNeedsRestore(initialUser.id),
+  );
 
-  // Restore on mount — useLayoutEffect runs before paint so the user never
-  // sees upload flash when a valid review snapshot exists in localStorage.
+  useEffect(() => {
+    appToast.dismiss();
+  }, []);
+
+  useEffect(() => {
+    debugLog("dashboard", "client mounted", {
+      userId: user.id,
+      workspaceReady,
+      appState,
+      isPro,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only debug snapshot
+  }, []);
+
+  // Restore on mount — useLayoutEffect runs before paint when a snapshot exists.
   useLayoutEffect(() => {
+    if (workspaceView === "account") {
+      hasRestoredRef.current = true;
+      return;
+    }
+    const needsRestore = workspaceNeedsRestore(user.id);
+    debugLog("dashboard", "workspace restore start", { needsRestore });
+    if (!needsRestore) {
+      hasRestoredRef.current = true;
+      return;
+    }
     try {
       const raw = localStorage.getItem(`getpgn:workspace:${user.id}`);
       if (!raw) return;
       const snap = JSON.parse(raw);
       if (!snap) return;
-      // Stale mid-extraction snapshots cannot be resumed after reload.
       if (snap.appState === "extracting") {
         localStorage.removeItem(`getpgn:workspace:${user.id}`);
         return;
@@ -396,11 +802,19 @@ export default function DashboardClient({
       setActiveGameId(
         typeof snap.activeGameId === "string" ? snap.activeGameId : null,
       );
+      setActiveGameIsDraft(snap.activeGameIsDraft === true);
       setActiveGameSharedSlug(
         typeof snap.activeGameSharedSlug === "string"
           ? snap.activeGameSharedSlug
           : null,
       );
+      if (
+        snap.savedGameSnapshot &&
+        typeof snap.savedGameSnapshot.pgn === "string" &&
+        typeof snap.savedGameSnapshot.movesJson === "string"
+      ) {
+        setSavedGameSnapshot(snap.savedGameSnapshot);
+      }
       if (typeof snap.pgnText === "string") setPgnText(snap.pgnText);
       if (typeof snap.validationSessionToken === "string") {
         setValidationSessionToken(snap.validationSessionToken);
@@ -411,61 +825,27 @@ export default function DashboardClient({
       )
         setImageUrl(snap.imageUrl);
       setAppState("review");
-    } catch {
-      // ignore corrupt/unreadable snapshots
+    } catch (err) {
+      debugLog("dashboard", "workspace restore failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
-      // Restore has now had its chance; the save effect may persist from here on.
       hasRestoredRef.current = true;
       setWorkspaceReady(true);
+      debugLog("dashboard", "workspace ready");
     }
-  }, [user.id]);
+  }, [user.id, workspaceView]);
 
   // Safety net: never block the dashboard behind restore skeletons indefinitely.
   useEffect(() => {
     if (workspaceReady) return;
     const id = window.setTimeout(() => {
+      debugLog("dashboard", "workspace safety timeout — forcing ready");
       hasRestoredRef.current = true;
       setWorkspaceReady(true);
-    }, 300);
+    }, 500);
     return () => window.clearTimeout(id);
   }, [workspaceReady, user.id]);
-
-  // Match move sheet height to the board card on lg+; move list scrolls when longer.
-  useLayoutEffect(() => {
-    if (appState !== "review" || activeTab !== "dashboard") {
-      setBoardCardHeight(null);
-      return;
-    }
-    const el = boardCardRef.current;
-    if (!el) return;
-    const mq = window.matchMedia("(min-width: 1024px)");
-
-    const update = () => {
-      if (!boardCardRef.current) return;
-      if (mq.matches) {
-        const next = boardCardRef.current.offsetHeight;
-        if (next > 0) setBoardCardHeight(next);
-      } else {
-        setBoardCardHeight(null);
-      }
-    };
-
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    mq.addEventListener("change", update);
-    return () => {
-      ro.disconnect();
-      mq.removeEventListener("change", update);
-    };
-  }, [
-    appState,
-    activeTab,
-    activeGameId,
-    boardOrientation,
-    turns.length,
-    gameIsValid,
-  ]);
 
   // Save whenever the working state changes (only when there's meaningful content).
   useEffect(() => {
@@ -482,7 +862,9 @@ export default function DashboardClient({
           pgn,
           gameIsValid,
           activeGameId,
+          activeGameIsDraft,
           activeGameSharedSlug,
+          savedGameSnapshot,
           pgnText,
           validationSessionToken,
           imageUrl:
@@ -504,7 +886,9 @@ export default function DashboardClient({
     pgn,
     gameIsValid,
     activeGameId,
+    activeGameIsDraft,
     activeGameSharedSlug,
+    savedGameSnapshot,
     pgnText,
     validationSessionToken,
     imageUrl,
@@ -532,11 +916,14 @@ export default function DashboardClient({
     };
   }, [appState]);
 
-  // Sync initial props if they change
+  // Sync user if server props change
   useEffect(() => {
     setUser(initialUser);
-    setGames(initialGames);
-  }, [initialUser, initialGames]);
+  }, [initialUser]);
+
+  useEffect(() => {
+    setOrganizerAccount(initialOrganizerAccount);
+  }, [initialOrganizerAccount]);
 
   // Resume Pro checkout after landing → signup → dashboard
   useEffect(() => {
@@ -564,14 +951,14 @@ export default function DashboardClient({
     setError(null);
   };
 
-  const handleClearImage = () => {
+  const handleClearImage = useCallback(() => {
     setSelectedFile(null);
-    if (imageUrl) {
-      URL.revokeObjectURL(imageUrl);
-    }
-    setImageUrl(null);
+    setImageUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setError(null);
-  };
+  }, []);
 
   const compressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
@@ -625,13 +1012,11 @@ export default function DashboardClient({
     });
   };
 
-  const handleExtractMoves = async () => {
+  const proceedWithExtract = async () => {
     if (!selectedFile) return;
 
     setAppState("extracting");
     setError(null);
-    setActiveGameId(null);
-    setActiveGameSharedSlug(null);
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(
@@ -681,19 +1066,33 @@ export default function DashboardClient({
         throw new Error("Invalid format returned by extraction engine");
       }
 
-      if (!isPro) {
+      if (
+        extractedData.scanConsumed &&
+        typeof extractedData.scanCount === "number"
+      ) {
         setUser((prev) => ({
           ...prev,
-          scanCount: Math.min(FREE_SCAN_LIMIT, prev.scanCount + 1),
+          scanCount: extractedData.scanCount,
+          bonusScanCount:
+            typeof extractedData.bonusScanCount === "number"
+              ? extractedData.bonusScanCount
+              : prev.bonusScanCount,
         }));
       } else {
-        const periodKey = getScanPeriodKey(user.subscriptionPlan);
-        setUser((prev) => ({
-          ...prev,
-          monthlyScanMonth: periodKey,
-          monthlyScanCount:
-            prev.monthlyScanMonth === periodKey ? prev.monthlyScanCount + 1 : 1,
-        }));
+        applyLocalScanConsumption();
+      }
+
+      if (
+        extractedData.referralBonusApplied &&
+        typeof extractedData.referrerUsername === "string"
+      ) {
+        showReferralBonusToast({
+          referrerUsername: extractedData.referrerUsername,
+          rewardScans:
+            typeof extractedData.referralRewardScans === "number"
+              ? extractedData.referralRewardScans
+              : 2,
+        });
       }
 
       if (typeof extractedData.validationToken === "string") {
@@ -701,6 +1100,12 @@ export default function DashboardClient({
       }
       applyValidationResult(extractedData);
       setAppState("review");
+      if (isPremium) {
+        void createTempScanDraft(
+          typeof extractedData.pgn === "string" ? extractedData.pgn : "",
+          (extractedData.moves || []) as Turn[],
+        );
+      }
     } catch (err: unknown) {
       console.error(err);
       const fallback =
@@ -719,6 +1124,19 @@ export default function DashboardClient({
     }
   };
 
+  const handleExtractMoves = () => {
+    if (!selectedFile) return;
+    withUnsavedGuard(() => {
+      if (appState === "review" && activeGameId) {
+        setActiveGameId(null);
+        setActiveGameIsDraft(false);
+        setActiveGameSharedSlug(null);
+        setSavedGameSnapshot(null);
+      }
+      void proceedWithExtract();
+    });
+  };
+
   const applyValidationResult = (
     valData: {
       moves?: Turn[];
@@ -735,13 +1153,9 @@ export default function DashboardClient({
     }
   };
 
-  const bumpScanCountAfterConsume = () => {
-    if (!isPro) {
-      setUser((prev) => ({
-        ...prev,
-        scanCount: Math.min(FREE_SCAN_LIMIT, prev.scanCount + 1),
-      }));
-    } else {
+  const applyLocalScanConsumption = () => {
+    const tier = getScanUsage(user, new Date(), organizerAccount).tier;
+    if (tier === "pro") {
       const periodKey = getScanPeriodKey(user.subscriptionPlan);
       setUser((prev) => ({
         ...prev,
@@ -749,43 +1163,29 @@ export default function DashboardClient({
         monthlyScanCount:
           prev.monthlyScanMonth === periodKey ? prev.monthlyScanCount + 1 : 1,
       }));
+    } else if (tier === "organizer") {
+      setOrganizerAccount((prev) =>
+        prev
+          ? {
+              ...prev,
+              totalScansUsed: prev.totalScansUsed + 1,
+              availableScans: Math.max(0, prev.availableScans - 1),
+            }
+          : prev,
+      );
+    } else {
+      setUser((prev) => {
+        const maxScans = FREE_SCAN_LIMIT + Math.max(0, prev.bonusScanCount ?? 0);
+        return {
+          ...prev,
+          scanCount: Math.min(maxScans, prev.scanCount + 1),
+        };
+      });
     }
   };
 
-  const persistActiveGame = async (turnsToSave: Turn[], pgnToSave: string) => {
-    if (!activeGameId || user.plan !== "PAID") return;
-
-    try {
-      const res = await fetch(`/api/games/${activeGameId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pgn: pgnToSave,
-          movesJson: JSON.stringify(turnsToSave),
-        }),
-      });
-
-      if (!res.ok) {
-        const apiErr = await readApiErrorOrLogout(
-          res,
-          "We couldn't save your edits. Please try again.",
-        );
-        if (apiErr === null) return;
-        throw new Error(apiErr);
-      }
-
-      const movesJson = JSON.stringify(turnsToSave);
-      setGames((prev) =>
-        prev.map((g) =>
-          g.id === activeGameId ? { ...g, pgn: pgnToSave, movesJson } : g,
-        ),
-      );
-    } catch (err) {
-      console.error("Failed to persist game edits:", err);
-      toast.error(
-        friendlyError(err, "We couldn't save your edits. Please try again."),
-      );
-    }
+  const bumpScanCountAfterConsume = () => {
+    applyLocalScanConsumption();
   };
 
   const runValidation = async (
@@ -857,11 +1257,33 @@ export default function DashboardClient({
           setValidationSessionToken(valData.validationToken);
         }
         if (valData.scanConsumed) {
-          bumpScanCountAfterConsume();
+          if (typeof valData.scanCount === "number") {
+            setUser((prev) => ({
+              ...prev,
+              scanCount: valData.scanCount,
+              bonusScanCount:
+                typeof valData.bonusScanCount === "number"
+                  ? valData.bonusScanCount
+                  : prev.bonusScanCount,
+            }));
+          } else {
+            bumpScanCountAfterConsume();
+          }
+          if (
+            valData.referralBonusApplied &&
+            typeof valData.referrerUsername === "string"
+          ) {
+            showReferralBonusToast({
+              referrerUsername: valData.referrerUsername,
+              rewardScans:
+                typeof valData.referralRewardScans === "number"
+                  ? valData.referralRewardScans
+                  : 2,
+            });
+          }
         }
 
         applyValidationResult(valData, options);
-        void persistActiveGame(valData.moves || [], valData.pgn || "");
       } catch (err: unknown) {
         console.error(err);
         if (blocking) {
@@ -1078,30 +1500,6 @@ export default function DashboardClient({
     return { sideToMove, totalPlies, checkInfo, positionLabel };
   };
 
-  const getGameSnapshot = () => {
-    const { turnCount, totalPlies, valid, flagged } = computeMoveStats(turns);
-    const activeGame = activeGameId
-      ? games.find((g) => g.id === activeGameId)
-      : null;
-    const title =
-      activeGame?.title ?? (activeGameId ? "Saved game" : "Current session");
-    const isShared = !!(
-      activeGameSharedSlug || activeGame?.publicLink?.enabled
-    );
-    return {
-      title,
-      turnCount,
-      totalPlies,
-      valid,
-      flagged,
-      currentPly: currentPlyIndex,
-      isSaved: !!activeGameId,
-      isShared,
-      gameIsValid,
-      hasImage: !!imageUrl,
-    };
-  };
-
   const renderScanUsageMeter = (opts?: {
     compact?: boolean;
     className?: string;
@@ -1114,27 +1512,17 @@ export default function DashboardClient({
       periodUnit={scanUsage.periodUnit}
       compact={opts?.compact}
       className={opts?.className}
-      onUpgrade={!isPro ? () => setShowPricingModal(true) : undefined}
+      onUpgrade={!isPremium ? () => setShowPricingModal(true) : undefined}
     />
   );
 
   const renderGameSearchInput = (opts?: { compact?: boolean }) => (
-    <div className={`relative ${opts?.compact ? "mb-2.5" : "mb-3"}`}>
-      <Search
-        className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2"
-        aria-hidden="true"
-      />
-      <input
-        type="search"
-        value={gameSearchQuery}
-        onChange={(e) => setGameSearchQuery(e.target.value)}
-        placeholder="Search by title, date, or move…"
-        aria-label="Search saved games"
-        className={`w-full rounded-xl border border-line bg-paper pl-9 pr-3 text-ink placeholder:text-muted-2 focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10 ${
-          opts?.compact ? "py-2 text-[12px]" : "py-2.5 text-[13px]"
-        }`}
-      />
-    </div>
+    <GamesLibrarySearchBar
+      value={gameSearchInput}
+      onChange={setGameSearchInput}
+      compact={opts?.compact}
+      className={opts?.compact ? "mb-0" : "mb-0"}
+    />
   );
 
   const renderSavedGamesPanel = () => {
@@ -1148,7 +1536,7 @@ export default function DashboardClient({
         }
       }
       const isActive = activeGameId === game.id;
-      const isDeleting = deleting && pendingDelete?.id === game.id;
+      const isOpening = loadingSavedGame?.id === game.id;
 
       return (
         <div
@@ -1157,9 +1545,11 @@ export default function DashboardClient({
           className="gp-stagger group relative"
         >
           <button
-            onClick={() => loadSavedGame(game)}
+            onClick={() => void openGame(game)}
+            disabled={Boolean(loadingSavedGame)}
             aria-current={isActive ? "true" : undefined}
-            className={`w-full text-left p-2.5 rounded-xl border flex items-center gap-3 transition-all duration-150 cursor-pointer ${
+            aria-busy={isOpening || undefined}
+            className={`w-full text-left p-2.5 rounded-xl border flex items-center gap-3 transition-all duration-150 cursor-pointer disabled:cursor-wait disabled:opacity-70 ${
               isActive
                 ? "bg-ink border-ink shadow-[var(--shadow-pop)]"
                 : "bg-paper border-line hover:border-muted-2 hover:bg-surface-2 hover:-translate-y-px hover:shadow-[var(--shadow-soft)]"
@@ -1182,13 +1572,29 @@ export default function DashboardClient({
             </span>
             <span className="min-w-0 flex-1">
               <span
-                className={`font-semibold text-[13px] block truncate leading-snug pr-7 ${isActive ? "text-paper" : "text-ink"}`}
+                className={`font-semibold text-[13px] block truncate leading-snug ${isActive ? "text-paper" : "text-ink"}`}
               >
                 {game.title}
               </span>
+              {isOpening ? (
+                <span
+                  className={`mt-1 flex items-center gap-1.5 text-[11px] ${isActive ? "text-paper/60" : "text-muted"}`}
+                >
+                  <Spinner size={12} />
+                  Opening…
+                </span>
+              ) : (
               <span
                 className={`flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[12px] mt-1 ${isActive ? "text-paper/55" : "text-muted-2"}`}
               >
+                {game.whitePlayer || game.blackPlayer ? (
+                  <>
+                    <span className="truncate max-w-[140px]">
+                      {game.whitePlayer || "White"} vs {game.blackPlayer || "Black"}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                  </>
+                ) : null}
                 <span className="gp-nums">
                   {formatGameDate(game.createdAt)}
                 </span>
@@ -1206,52 +1612,42 @@ export default function DashboardClient({
                   </span>
                 )}
               </span>
+              )}
             </span>
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setPendingDelete(game);
-            }}
-            disabled={isDeleting}
-            aria-busy={isDeleting || undefined}
-            aria-label={`Delete ${game.title}`}
-            title="Delete game"
-            className={`absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg border opacity-0 transition-all duration-150 focus:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-100 disabled:cursor-not-allowed cursor-pointer ${
-              isActive
-                ? "border-paper/25 bg-paper/10 text-paper/75 hover:bg-paper/20 hover:text-paper"
-                : "border-line-strong bg-paper text-muted hover:border-danger hover:bg-danger-bg hover:text-danger"
-            }`}
-          >
-            {isDeleting ? (
-              <Spinner size={12} />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
-            )}
           </button>
         </div>
       );
     };
 
     return (
-      <div className="bg-surface border border-line rounded-2xl p-4 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between mb-3.5 px-1 shrink-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-surface p-4">
+        <div className="mb-3.5 flex shrink-0 items-center justify-between px-1">
           <h2 className="font-semibold text-[11px] text-muted-2 uppercase tracking-widest flex items-center gap-2">
             <History className="w-3 h-3" />
             Saved Games
           </h2>
-          {isPro && games.length > 0 && (
+          {isPremium && gamesTotal > 0 && (
             <span className="text-[11px] text-muted font-mono gp-nums px-1.5 py-0.5 rounded-md bg-surface-2 border border-line">
-              {games.length}
+              {gamesTotal}
             </span>
           )}
         </div>
-        {isPro && games.length > 0 && renderGameSearchInput({ compact: true })}
-        <div className="relative min-h-0">
-          <div className="overflow-y-auto space-y-1.5 -mx-1 px-1 pb-1 max-h-[min(420px,calc(100vh-280px))] scroll-smooth [scrollbar-gutter:stable]">
-            {isPro ? (
-              games.length === 0 ? (
+        {isPremium && gamesTotal > 0 && (
+          <div className="mb-3 shrink-0">{renderGameSearchInput({ compact: true })}</div>
+        )}
+        <div className="relative flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            ref={sidebarGamesScrollRef}
+            onScroll={handleGamesListScroll}
+            className="-mx-1 h-0 min-h-0 flex-1 space-y-1.5 overflow-y-auto scroll-smooth px-1 pb-1 [scrollbar-gutter:stable]"
+          >
+            {isPremium ? (
+              gamesSearchLoading ? (
+                <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-muted">
+                  <Spinner size={14} />
+                  Searching…
+                </div>
+              ) : gamesTotal === 0 && !debouncedGameSearch.trim() ? (
                 <div className="text-center space-y-3 py-14 px-4">
                   <div className="mx-auto w-fit mb-1 opacity-70">
                     <BoardThumbnail size={56} aria-label="Empty board" />
@@ -1264,7 +1660,7 @@ export default function DashboardClient({
                     with a board preview.
                   </p>
                 </div>
-              ) : filteredGames.length === 0 ? (
+              ) : filteredGames.length === 0 && debouncedGameSearch.trim() ? (
                 <div className="text-center py-10 px-4">
                   <p className="text-[12px] font-semibold text-ink">No matches</p>
                   <p className="mt-1 text-[11px] text-muted">
@@ -1272,7 +1668,15 @@ export default function DashboardClient({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-1.5">{filteredGames.map(renderGameRow)}</div>
+                <>
+                  <div className="space-y-1.5">{filteredGames.map(renderGameRow)}</div>
+                  <InfiniteScrollSentinel
+                    hasMore={gamesHasMore}
+                    loading={gamesLoadingMore}
+                    onLoadMore={loadMoreGames}
+                    scrollRootRef={sidebarGamesScrollRef}
+                  />
+                </>
               )
             ) : (
               <div className="relative overflow-hidden p-5 rounded-xl border border-line-strong bg-paper text-center space-y-4 mt-1">
@@ -1312,26 +1716,41 @@ export default function DashboardClient({
               </div>
             )}
           </div>
-          {isPro && games.length > 4 && (
+          {isPremium && filteredGames.length > 4 && (
             <div
               className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface to-transparent"
               aria-hidden="true"
             />
           )}
         </div>
-        {isPro && games.length > 0 && (
+        {isPremium && gamesTotal > 0 && (
           <p className="mt-2 px-1 text-[11px] text-muted-2 leading-relaxed">
-            {gameSearchQuery.trim()
-              ? `${filteredGames.length} of ${games.length} games`
-              : games.length === 1
+            {debouncedGameSearch.trim()
+              ? `${filteredGames.length} of ${gamesTotal} games`
+              : gamesTotal === 1
                 ? "1 saved game"
-                : `${games.length} saved games`}
-            {filteredGames.length > 4 ? " · scroll for more" : ""}
+                : `${gamesTotal} saved games`}
+            {isSearchPending ? " · updating search…" : ""}
+            {gamesHasMore ? ` · showing ${filteredGames.length}` : ""}
+            {gamesHasMore ? " · scroll for more" : ""}
           </p>
         )}
       </div>
     );
   };
+
+  const renderReferralPromo = (opts?: {
+    className?: string;
+    lowScans?: boolean;
+  }) =>
+    showFreeReferralPromo ? (
+      <ReferralNudge
+        userId={user.id}
+        lowScans={opts?.lowScans ?? referralPromoLowScans}
+        onOpenReferrals={openAccountReferrals}
+        className={opts?.className}
+      />
+    ) : null;
 
   const renderUploadScanLimitBanner = () =>
     scansExhausted ? (
@@ -1344,28 +1763,46 @@ export default function DashboardClient({
           </span>
           <div className="min-w-0 flex-1 space-y-1">
             <span className="block text-[15px] font-semibold text-ink">
-              {isPro
-                ? scanUsage.periodUnit === "year"
-                  ? "Yearly scan limit reached"
-                  : "Monthly scan limit reached"
-                : "All free scans used"}
+              {scanUsage.tier === "organizer"
+                ? "Prepaid scan credits used up"
+                : isPro
+                  ? scanUsage.periodUnit === "year"
+                    ? "Yearly scan limit reached"
+                    : "Monthly scan limit reached"
+                  : "All free scans used"}
             </span>
             <span className="block text-[13px] leading-relaxed text-muted">
-              {isPro
-                ? scanUsage.periodUnit === "year"
-                  ? `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this year. Your quota resets on January 1.`
-                  : `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this month. Your quota resets on the 1st.`
-                : "Upgrade for scan allowances, a permanent library, and shareable replays."}
+              {scanUsage.tier === "organizer"
+                ? `You've used all ${scanUsage.limit.toLocaleString()} prepaid scans. Purchase another pack to keep digitizing.`
+                : isPro
+                  ? scanUsage.periodUnit === "year"
+                    ? `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this year. Your quota resets on January 1.`
+                    : `You've used ${scanUsage.used.toLocaleString()} of ${scanUsage.limit.toLocaleString()} scans this month. Your quota resets on the 1st.`
+                  : "Upgrade for scan allowances, a permanent library, and shareable replays."}
             </span>
           </div>
-          {!isPro && (
+          {scanUsage.tier === "organizer" ? (
+            <button
+              onClick={() => router.push("/organizer")}
+              className="btn-primary btn-sm shrink-0 cursor-pointer"
+            >
+              Buy more scans
+            </button>
+          ) : isPro && scansExhausted ? (
+            <button
+              onClick={() => router.push("/organizer")}
+              className="btn-primary btn-sm shrink-0 cursor-pointer"
+            >
+              Top up scans
+            </button>
+          ) : !isPremium ? (
             <button
               onClick={() => setShowPricingModal(true)}
               className="btn-primary btn-sm shrink-0 cursor-pointer"
             >
               View plans
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     ) : null;
@@ -1409,11 +1846,13 @@ export default function DashboardClient({
           onClear={handleClearImage}
           disabled={scansExhausted}
           disabledMessage={
-            isPro
-              ? scanUsage.periodUnit === "year"
-                ? "You've used all scans for this year. Your quota resets on January 1."
-                : "You've used all scans for this month. Your quota resets on the 1st."
-              : "You've used both free scans. Upgrade to Pro to keep digitizing."
+            scanUsage.tier === "organizer"
+              ? "You've used all prepaid scans. Buy another pack to keep digitizing."
+              : isPro
+                ? scanUsage.periodUnit === "year"
+                  ? "You've used all scans for this year. Your quota resets on January 1."
+                  : "You've used all scans for this month. Your quota resets on the 1st."
+                : "You've used both free scans. Upgrade to Pro to keep digitizing."
           }
         />
         {selectedFile && (
@@ -1478,7 +1917,7 @@ export default function DashboardClient({
     return (
       <div className="grid grid-cols-3 gap-2 rounded-[16px] border border-line/40 bg-surface/15 p-3 gp-fade-up">
         {[
-          { label: "Games", value: games.length },
+          { label: "Games", value: gamesTotal },
           { label: "Shared", value: shared },
           { label: "Turns", value: totalTurns },
         ].map(({ label, value }) => (
@@ -1498,28 +1937,47 @@ export default function DashboardClient({
     );
   };
 
-  const renderUploadProPerks = () => (
-    <div className="hidden rounded-[20px] border border-line/45 bg-surface/20 px-5 py-4 gp-fade-up lg:block">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-2">
-        Your plan
-      </p>
-      <ul className="mt-3 space-y-2.5">
-        {[
-          {
-            icon: InfinityIcon,
-            text: formatProScanAllowance(user.subscriptionPlan),
-          },
-          { icon: History, text: "Cloud game library" },
-          { icon: Share2, text: "Shareable replay links" },
-        ].map(({ icon: Icon, text }) => (
-          <li key={text} className="flex items-center gap-2.5 text-[12px] text-muted">
-            <Icon className="h-3.5 w-3.5 shrink-0 text-ink" />
-            {text}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  const renderUploadProPerks = () => {
+    const scanAllowanceLine = isPro
+      ? formatProScanAllowance(user.subscriptionPlan)
+      : hasOrganizerWalletAccess
+        ? `${FREE_SCAN_LIMIT} free + ${(organizerAccount?.availableScans ?? 0).toLocaleString()} prepaid scans`
+        : `${FREE_SCAN_LIMIT} free scans`;
+
+    const perks: { icon: typeof InfinityIcon; text: string }[] = [
+      { icon: InfinityIcon, text: scanAllowanceLine },
+    ];
+
+    if (isPro && hasOrganizerWalletAccess) {
+      perks.push({
+        icon: InfinityIcon,
+        text: `${(organizerAccount?.availableScans ?? 0).toLocaleString()} prepaid scans available`,
+      });
+    }
+
+    if (isPremium) {
+      perks.push(
+        { icon: History, text: "Cloud game library" },
+        { icon: Share2, text: "Shareable replay links" },
+      );
+    }
+
+    return (
+      <div className="hidden rounded-[20px] border border-line/45 bg-surface/20 px-5 py-4 gp-fade-up lg:block">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-2">
+          Your plan
+        </p>
+        <ul className="mt-3 space-y-2.5">
+          {perks.map(({ icon: Icon, text }) => (
+            <li key={text} className="flex items-center gap-2.5 text-[12px] text-muted">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-ink" />
+              {text}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
 
   const renderUploadSavedGamesLibrary = (wide?: boolean) => (
     <section
@@ -1539,25 +1997,32 @@ export default function DashboardClient({
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line/60 bg-paper/70 px-2.5 py-1 text-[11px] text-muted">
             <History className="h-3 w-3" />
             <span className="font-semibold text-ink gp-nums">
-              {games.length}
+              {gamesTotal}
             </span>
           </span>
         </div>
 
-        {games.length > 0 && (
+        {gamesTotal > 0 && (
           <div className="border-b border-line/40 px-4 py-3 sm:px-5">
             {renderGameSearchInput({ compact: true })}
           </div>
         )}
 
         <div
+          ref={uploadGamesScrollRef}
+          onScroll={handleGamesListScroll}
           className={`divide-y divide-line/35 overflow-y-auto scroll-smooth [scrollbar-gutter:stable] ${
             wide
-              ? "max-h-[min(320px,42vh)] lg:max-h-[min(520px,62vh)]"
-              : "max-h-[min(280px,36vh)]"
+              ? "max-h-[min(360px,48vh)] lg:max-h-[min(420px,52vh)]"
+              : "max-h-[min(300px,40vh)]"
           }`}
         >
-          {filteredGames.length === 0 && gameSearchQuery.trim() ? (
+          {gamesSearchLoading ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-10 text-[12px] text-muted sm:px-5">
+              <Spinner size={14} />
+              Searching…
+            </div>
+          ) : filteredGames.length === 0 && debouncedGameSearch.trim() ? (
             <div className="px-4 py-10 text-center sm:px-5">
               <p className="text-[13px] font-semibold text-ink">No matches</p>
               <p className="mt-1 text-[12px] text-muted">
@@ -1575,15 +2040,17 @@ export default function DashboardClient({
               }
             }
             const isActive = activeGameId === game.id;
-            const isDeleting = deleting && pendingDelete?.id === game.id;
+            const isOpening = loadingSavedGame?.id === game.id;
 
             return (
               <div key={game.id} className="group relative">
                 <button
                   type="button"
-                  onClick={() => loadSavedGame(game)}
+                  onClick={() => void openGame(game)}
+                  disabled={Boolean(loadingSavedGame)}
                   aria-current={isActive ? "true" : undefined}
-                  className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors sm:px-5 sm:py-4 ${
+                  aria-busy={isOpening || undefined}
+                  className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors sm:px-5 sm:py-4 disabled:cursor-wait disabled:opacity-70 ${
                     isActive ? "bg-ink text-paper" : "hover:bg-surface/50"
                   }`}
                 >
@@ -1611,6 +2078,13 @@ export default function DashboardClient({
                         isActive ? "text-paper/60" : "text-muted"
                       }`}
                     >
+                      {isOpening ? (
+                        <>
+                          <Spinner size={12} />
+                          Opening…
+                        </>
+                      ) : (
+                        <>
                       <span className="gp-nums">
                         {turnCount} {turnCount === 1 ? "turn" : "turns"}
                       </span>
@@ -1628,6 +2102,8 @@ export default function DashboardClient({
                           </span>
                         </>
                       ) : null}
+                        </>
+                      )}
                     </span>
                   </span>
                   <ArrowUpRight
@@ -1638,39 +2114,22 @@ export default function DashboardClient({
                     }`}
                   />
                 </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPendingDelete(game);
-                  }}
-                  disabled={isDeleting}
-                  aria-busy={isDeleting || undefined}
-                  aria-label={`Delete ${game.title}`}
-                  title="Delete game"
-                  className={`absolute right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md border opacity-0 shadow-[var(--shadow-soft)] transition-all duration-150 focus:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-100 cursor-pointer ${
-                    isActive
-                      ? "border-paper/25 bg-paper/10 text-paper/75 hover:bg-paper/20 hover:text-paper"
-                      : "border-line-strong bg-paper text-muted hover:border-danger hover:bg-danger-bg hover:text-danger"
-                  }`}
-                >
-                  {isDeleting ? (
-                    <Spinner size={12} />
-                  ) : (
-                    <Trash2 className="h-3 w-3" />
-                  )}
-                </button>
               </div>
             );
           })}
+          <InfiniteScrollSentinel
+            hasMore={gamesHasMore}
+            loading={gamesLoadingMore}
+            onLoadMore={loadMoreGames}
+            scrollRootRef={uploadGamesScrollRef}
+          />
         </div>
       </div>
     </section>
   );
 
   const renderUploadLibraryOnboarding = (wide?: boolean) => {
-    if (!isPro) return null;
+    if (!isPremium) return null;
 
     return (
     <section
@@ -1748,18 +2207,13 @@ export default function DashboardClient({
     const full = getTimeGreeting(user.username);
     const commaIdx = full.indexOf(", ");
     const phrase = commaIdx >= 0 ? full.slice(0, commaIdx) : full;
-    const name = commaIdx >= 0 ? full.slice(commaIdx + 2) : null;
+    const handle = user.username ? `@${user.username}` : null;
 
     return (
       <div className="gp-fade-up text-left">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-2">
-          {phrase}
-        </p>
-        {name ? (
-          <h2 className="mt-0.5 text-[clamp(1.375rem,3vw,1.875rem)] font-semibold tracking-[-0.02em] text-ink">
-            {name}
-          </h2>
-        ) : null}
+        <h2 className="text-[clamp(1.25rem,2.8vw,1.75rem)] font-semibold tracking-[-0.03em] text-ink normal-case">
+          {handle ? `${phrase}, ${handle}` : phrase}
+        </h2>
       </div>
     );
   };
@@ -1779,7 +2233,7 @@ export default function DashboardClient({
               {scanUsage.used.toLocaleString()}/{scanUsage.limit.toLocaleString()}
             </span>{" "}
             scans used
-            {isPro
+            {isPro && scanUsage.tier === "pro"
               ? scanUsage.periodUnit === "year"
                 ? " this year"
                 : " this month"
@@ -1788,29 +2242,37 @@ export default function DashboardClient({
         </div>
         <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-semibold tracking-[-0.02em] text-ink leading-[1.15]">
           {scansExhausted
-            ? isPro
-              ? scanUsage.periodUnit === "year"
-                ? "Yearly scan limit reached"
-                : "Monthly scan limit reached"
-              : "Upgrade to keep digitizing"
+            ? scanUsage.tier === "organizer"
+              ? "Prepaid scans used up"
+              : isPro
+                ? scanUsage.periodUnit === "year"
+                  ? "Yearly scan limit reached"
+                  : "Monthly scan limit reached"
+                : "Upgrade to keep digitizing"
             : "Digitize your chess games"}
         </h1>
         <p className="mt-2.5 max-w-[26rem] text-[14px] leading-relaxed text-muted">
           {scansExhausted
-            ? isPro
-              ? scanUsage.periodUnit === "year"
-              ? `You've used all ${scanUsage.limit.toLocaleString()} scans for this year. Your quota resets on January 1.`
-              : `You've used all ${scanUsage.limit.toLocaleString()} scans for this month. Your quota resets on the 1st.`
-              : "You've used both free scans. Upgrade for scan allowances and shareable replays."
+            ? scanUsage.tier === "organizer"
+              ? `You've used all ${scanUsage.limit.toLocaleString()} prepaid scans. Top up from Billing or buy another pack.`
+              : isPro
+                ? scanUsage.periodUnit === "year"
+                  ? `You've used all ${scanUsage.limit.toLocaleString()} scans for this year. Your quota resets on January 1.`
+                  : `You've used all ${scanUsage.limit.toLocaleString()} scans for this month. Your quota resets on the 1st.`
+                : "You've used both free scans. Upgrade for scan allowances and shareable replays."
             : "Upload a handwritten scoresheet — we extract moves, validate the game, and export clean PGN."}
         </p>
         {!scansExhausted && (
           <p className="mt-3 text-[12px] text-muted-2">
-            {isPro
-              ? scanUsage.periodUnit === "year"
-                ? `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this year`
-                : `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this month`
-              : `No credit card · ${scanUsage.remaining} free scan${scanUsage.remaining === 1 ? "" : "s"} left`}
+            {scanUsage.breakdown?.free && scanUsage.breakdown.wallet
+              ? `No credit card · ${scanUsage.breakdown.free.remaining} free + ${scanUsage.breakdown.wallet.remaining.toLocaleString()} prepaid scan credits`
+              : scanUsage.tier === "organizer"
+                ? `${scanUsage.remaining.toLocaleString()} prepaid scan${scanUsage.remaining === 1 ? "" : "s"} left`
+                : isPro
+                  ? scanUsage.periodUnit === "year"
+                    ? `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this year`
+                    : `${scanUsage.remaining.toLocaleString()} scan${scanUsage.remaining === 1 ? "" : "s"} left this month`
+                  : `No credit card · ${scanUsage.remaining} free scan${scanUsage.remaining === 1 ? "" : "s"} left`}
           </p>
         )}
       </div>
@@ -1818,13 +2280,13 @@ export default function DashboardClient({
   };
 
   const renderUploadScreen = () => {
-    const hasLibrary = isPro && games.length > 0;
+    const hasLibrary = isPremium && gamesTotal > 0;
     const showHero = !imageUrl && !selectedFile;
 
     if (hasLibrary) {
       return (
         <div className="w-full space-y-6 pb-10">
-          <div className="hidden space-y-1.5 lg:block">
+          <div className="space-y-1.5">
             {renderUploadGreeting()}
             {!imageUrl && !selectedFile ? (
               <p className="text-[15px] font-medium tracking-tight text-muted">
@@ -1859,21 +2321,21 @@ export default function DashboardClient({
       );
     }
 
-    if (!isPro) {
+    if (!isPremium) {
       return (
         <div className="w-full space-y-6 pb-4">
-          {showHero ? (
-            <div className="hidden lg:block">{renderUploadGreeting()}</div>
-          ) : null}
+          {showHero ? <div>{renderUploadGreeting()}</div> : null}
           <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-10 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="order-1 min-w-0 space-y-4 lg:order-1 lg:space-y-6">
               {renderUploadScanLimitBanner()}
+              {renderReferralPromo({ className: "lg:hidden" })}
               {renderUploadError()}
               {renderUploadFormCard({ showHeading: false })}
               {!imageUrl && renderUploadFeaturePills()}
             </div>
             <aside className="order-2 space-y-4 lg:order-2 lg:sticky lg:top-24 lg:self-start">
               {renderScanUsageMeter({ className: "hidden lg:block" })}
+              {renderReferralPromo({ className: "hidden lg:block" })}
               <FreeVsProTable
                 compact
                 onUpgrade={() => setShowPricingModal(true)}
@@ -1892,7 +2354,7 @@ export default function DashboardClient({
 
     return (
       <div className="w-full space-y-6 pb-6">
-        <div className="hidden lg:block">{renderUploadGreeting()}</div>
+        <div>{renderUploadGreeting()}</div>
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,400px)] lg:items-start lg:gap-10 xl:gap-12">
           <div className="order-1 min-w-0 space-y-4 lg:order-2 lg:sticky lg:top-24 lg:self-start">
             {renderUploadScanLimitBanner()}
@@ -1902,71 +2364,199 @@ export default function DashboardClient({
             {renderUploadProPerks()}
           </div>
           <div className="order-2 hidden min-w-0 space-y-6 lg:order-1 lg:block">
-            {showHero ? renderUploadHero() : null}
-            {!imageUrl && renderUploadLibraryOnboarding(true)}
+            {showHero ? (
+              <>
+                {renderUploadHero()}
+                {renderUploadLibraryOnboarding(true)}
+              </>
+            ) : (
+              <UploadBrandingAside />
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  const handleReset = () => {
+  const clearWorkspaceState = useCallback(() => {
     setTurns([]);
     setPgn("");
     setGameIsValid(false);
     setCurrentPlyIndex(0);
     setActiveGameId(null);
+    setActiveGameIsDraft(false);
     setActiveGameSharedSlug(null);
+    setSavedGameSnapshot(null);
+    setShowDiscardUnsavedConfirm(false);
+    pendingAfterDiscardRef.current = null;
     setPgnText("");
     setValidationSessionToken(null);
     handleClearImage();
     setAppState("upload");
     try {
       localStorage.removeItem(`getpgn:workspace:${user.id}`);
-    } catch {}
+    } catch {
+      /* ignore */
+    }
+  }, [user.id, handleClearImage]);
+
+  const performReset = useCallback(() => {
+    if (workspaceView === "game") {
+      returnToDashboard();
+      return;
+    }
+    clearWorkspaceState();
+  }, [workspaceView, returnToDashboard, clearWorkspaceState]);
+
+  const handleReset = () => {
+    if (isLeavingWorkspace) return;
+    withUnsavedGuard(performReset);
   };
 
-  const handleDeleteGame = async () => {
-    if (!pendingDelete) return;
-    const target = pendingDelete;
-    setDeleting(true);
+  const handleSaveGameMeta = async (values: GameMetadataValues) => {
+    setGameMetaOverrides(values);
+
+    if (!activeGameId || !isPremium) {
+      setShowGameMetaEdit(false);
+      return;
+    }
+
+    setSavingGameMeta(true);
     try {
-      const res = await fetch("/api/games/delete", {
-        method: "POST",
+      const res = await fetch(`/api/games/${activeGameId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gameId: target.id }),
+        body: JSON.stringify({
+          title: values.title,
+          whitePlayer: values.whitePlayer,
+          blackPlayer: values.blackPlayer,
+        }),
       });
       if (!res.ok) {
         const apiErr = await readApiErrorOrLogout(
           res,
-          "We couldn't delete that game. Please try again.",
+          "We couldn't update game details.",
         );
         if (apiErr === null) return;
         throw new Error(apiErr);
       }
-      setGames((prev) => prev.filter((g) => g.id !== target.id));
-      if (activeGameId === target.id) handleReset();
-      toast.success("Game deleted");
-      setPendingDelete(null);
+      const data = await res.json();
+      const saved = data.game as SavedGame;
+      if (typeof saved.pgn === "string") {
+        setPgn(saved.pgn);
+      }
+      setGames((prev) => {
+        const next: SavedGame = {
+          id: activeGameId,
+          title: saved.title,
+          whitePlayer: saved.whitePlayer,
+          blackPlayer: saved.blackPlayer,
+          pgn: saved.pgn ?? injectPlayerNamesIntoPgn(pgn, values.whitePlayer, values.blackPlayer),
+          movesJson: saved.movesJson ?? prev.find((g) => g.id === activeGameId)?.movesJson,
+          createdAt: saved.createdAt ?? prev.find((g) => g.id === activeGameId)?.createdAt ?? new Date().toISOString(),
+          publicLink:
+            prev.find((g) => g.id === activeGameId)?.publicLink ??
+            (activeGameSharedSlug
+              ? { slug: activeGameSharedSlug, enabled: true }
+              : saved.publicLink ?? null),
+        };
+        if (prev.some((g) => g.id === activeGameId)) {
+          return prev.map((g) => (g.id === activeGameId ? { ...g, ...next } : g));
+        }
+        return [next, ...prev];
+      });
+      setGameMetaOverrides(null);
+      toast.success("Game details updated");
+      setShowGameMetaEdit(false);
     } catch (err) {
-      toast.error(
-        friendlyError(err, "We couldn't delete that game. Please try again."),
-      );
+      toast.error(friendlyError(err, "We couldn't update game details."));
     } finally {
-      setDeleting(false);
+      setSavingGameMeta(false);
     }
   };
 
-  const handleSaveGame = async (title: string): Promise<string | null> => {
-    if (!pgn || user.plan !== "PAID") return null;
+  const handleSaveGame = async (input: {
+    title: string;
+    whitePlayer: string;
+    blackPlayer: string;
+    skipNavigation?: boolean;
+    confirmSave?: boolean;
+  }): Promise<string | null> => {
+    const confirmingLibrarySave = input.confirmSave !== false;
+    if (!pgn || !isPremium) return null;
 
     try {
+      if (activeGameId) {
+        const res = await fetch(`/api/games/${activeGameId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pgn,
+            title: input.title,
+            whitePlayer: input.whitePlayer,
+            blackPlayer: input.blackPlayer,
+            movesJson: JSON.stringify(turns),
+            ...(confirmingLibrarySave ? { confirmSave: true } : {}),
+          }),
+        });
+
+        if (!res.ok) {
+          const apiErr = await readApiErrorOrLogout(
+            res,
+            "We couldn't save this game. Please try again.",
+          );
+          if (apiErr === null) return null;
+          throw new Error(apiErr);
+        }
+        const data = await res.json();
+        const saved = data.game as SavedGame & {
+          publicLink?: { slug: string; enabled: boolean } | null;
+        };
+        const savedPgn = typeof saved.pgn === "string" ? saved.pgn : pgn;
+        if (typeof saved.pgn === "string") {
+          setPgn(saved.pgn);
+        }
+        const movesJson = JSON.stringify(turns);
+        const sharedSlug = activeGameSharedSlug;
+
+        setSavedGameSnapshot({
+          pgn: savedPgn,
+          movesJson: JSON.stringify(turns),
+        });
+        setGameMetaOverrides(null);
+        if (confirmingLibrarySave) {
+          setActiveGameIsDraft(false);
+          upsertGameInLibraryList({
+            id: activeGameId,
+            title: input.title,
+            whitePlayer: saved.whitePlayer ?? input.whitePlayer,
+            blackPlayer: saved.blackPlayer ?? input.blackPlayer,
+            pgn: savedPgn,
+            movesJson,
+            createdAt:
+              typeof saved.createdAt === 'string'
+                ? saved.createdAt
+                : new Date().toISOString(),
+            publicLink: sharedSlug
+              ? { slug: sharedSlug, enabled: true }
+              : saved.publicLink ?? null,
+          });
+          toast.success("Game saved to your library");
+        }
+        if (!input.skipNavigation && workspaceView !== "game") {
+          router.push(`/game/${activeGameId}`);
+        }
+        return activeGameId;
+      }
+
       const res = await fetch("/api/games/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pgn,
-          title,
+          title: input.title,
+          whitePlayer: input.whitePlayer,
+          blackPlayer: input.blackPlayer,
           movesJson: JSON.stringify(turns),
         }),
       });
@@ -1980,18 +2570,34 @@ export default function DashboardClient({
         throw new Error(apiErr);
       }
       const data = await res.json();
+      const savedPgn =
+        typeof data.game.pgn === "string" ? data.game.pgn : pgn;
+      if (typeof data.game.pgn === "string") {
+        setPgn(data.game.pgn);
+      }
 
       const newGame: SavedGame = {
         id: data.game.id,
         title: data.game.title,
-        pgn,
+        whitePlayer: data.game.whitePlayer,
+        blackPlayer: data.game.blackPlayer,
+        pgn: savedPgn,
         movesJson: JSON.stringify(turns),
         createdAt: data.game.createdAt,
         publicLink: null,
       };
 
-      setGames((prev) => [newGame, ...prev]);
+      upsertGameInLibraryList(newGame);
       setActiveGameId(data.game.id);
+      setActiveGameIsDraft(false);
+      setSavedGameSnapshot({
+        pgn: savedPgn,
+        movesJson: JSON.stringify(turns),
+      });
+      setGameMetaOverrides(null);
+      if (!input.skipNavigation && workspaceView !== "game") {
+        router.push(`/game/${data.game.id}`);
+      }
       toast.success("Game saved to your library");
       return data.game.id;
     } catch (err: unknown) {
@@ -2003,8 +2609,74 @@ export default function DashboardClient({
     }
   };
 
+  const runPendingLeaveAction = useCallback(() => {
+    const leave = pendingAfterDiscardRef.current;
+    pendingAfterDiscardRef.current = null;
+    if (leave) {
+      leave();
+      return;
+    }
+    if (workspaceView === "game") {
+      returnToDashboard();
+      return;
+    }
+    clearWorkspaceState();
+  }, [workspaceView, returnToDashboard, clearWorkspaceState]);
+
+  const handleDiscardAndLeave = async () => {
+    await discardActiveDraft();
+    setShowDiscardUnsavedConfirm(false);
+    try {
+      localStorage.removeItem(`getpgn:workspace:${user.id}`);
+    } catch {
+      /* ignore */
+    }
+    runPendingLeaveAction();
+  };
+
+  const handleSaveAndLeave = async () => {
+    const promotingDraft = activeGameIsDraft;
+    setSavingBeforeLeave(true);
+    try {
+      const savedId = await handleSaveGame({
+        title: persistedGameMeta.title,
+        whitePlayer: persistedGameMeta.whitePlayer,
+        blackPlayer: persistedGameMeta.blackPlayer,
+        skipNavigation: true,
+        confirmSave: true,
+      });
+      if (!savedId) return;
+
+      if (promotingDraft) {
+        upsertGameInLibraryList({
+          id: savedId,
+          title: persistedGameMeta.title,
+          whitePlayer: persistedGameMeta.whitePlayer,
+          blackPlayer: persistedGameMeta.blackPlayer,
+          pgn,
+          movesJson: JSON.stringify(turns),
+          createdAt: new Date().toISOString(),
+          publicLink: activeGameSharedSlug
+            ? { slug: activeGameSharedSlug, enabled: true }
+            : null,
+        });
+      }
+
+      try {
+        localStorage.removeItem(`getpgn:workspace:${user.id}`);
+      } catch {
+        /* ignore */
+      }
+
+      setShowDiscardUnsavedConfirm(false);
+      runPendingLeaveAction();
+    } finally {
+      setSavingBeforeLeave(false);
+    }
+  };
+
   const handleShareGame = async (gameId: string): Promise<string | null> => {
-    if (!gameId || user.plan !== "PAID") return null;
+    if (!gameId || !isPremium) return null;
 
     try {
       const res = await fetch("/api/games/share", {
@@ -2051,9 +2723,11 @@ export default function DashboardClient({
     }
   };
 
-  const loadSavedGame = async (game: SavedGame) => {
+  const loadSavedGameById = async (gameId: string, titleHint?: string) => {
+    if (loadingSavedGame) return;
+    setLoadingSavedGame({ id: gameId, title: titleHint ?? "Saved game" });
     try {
-      const res = await fetch(`/api/games/${game.id}`);
+      const res = await fetch(`/api/games/${gameId}`);
       if (!res.ok) {
         const apiErr = await readApiErrorOrLogout(
           res,
@@ -2085,18 +2759,41 @@ export default function DashboardClient({
         pgn: fullGame.pgn,
         valid: true,
       });
+      setCurrentPlyIndex(0);
       setActiveGameId(fullGame.id);
+      setActiveGameIsDraft(false);
       setActiveGameSharedSlug(fullGame.publicLink?.slug || null);
+      setSavedGameSnapshot({
+        pgn: fullGame.pgn ?? "",
+        movesJson: fullGame.movesJson!,
+      });
       setAppState("review");
       setError(null);
     } catch (err) {
       console.error("Failed to load saved game:", err);
       toast.error(friendlyError(err, "We couldn't open that saved game."));
+    } finally {
+      setLoadingSavedGame(null);
     }
   };
 
+  const openGame = (game: SavedGame) => {
+    if (loadingSavedGame) return;
+    router.push(`/game/${game.id}`);
+  };
+
+  useEffect(() => {
+    if (!initialGameId || !isPremium) return;
+    if (activeGameId === initialGameId && turns.length > 0) return;
+    const stub = games.find((g) => g.id === initialGameId);
+    void loadSavedGameById(initialGameId, stub?.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialGameId, isPro]);
+
   // ─── Billing (Upgrade & Simulation) Handlers ────────────────────────────
-  const handleCreateSubscription = async (plan: "monthly" | "yearly") => {
+  const handleCreateSubscription = async (
+    plan: "monthly" | "yearly" | "enterprise",
+  ) => {
     setBillingLoading(true);
     try {
       await openRazorpayCheckout({
@@ -2112,13 +2809,15 @@ export default function DashboardClient({
         }) => {
           setBillingLoading(true);
           try {
+            const activatedPlan =
+              verifiedPlan === "enterprise" ? "ENTERPRISE" : "PAID";
             if (deferredBilling) {
               const chargeDate = subscriptionStart
                 ? formatBillingDate(subscriptionStart)
                 : "your renewal date";
               setUser((prev) => ({
                 ...prev,
-                plan: "PAID",
+                plan: activatedPlan,
                 subscriptionStatus: subscriptionStatus ?? "authenticated",
                 subscriptionPlan: verifiedPlan,
                 subscriptionId,
@@ -2132,7 +2831,7 @@ export default function DashboardClient({
             } else {
               setUser((prev) => ({
                 ...prev,
-                plan: "PAID",
+                plan: activatedPlan,
                 subscriptionStatus: subscriptionStatus ?? "active",
                 subscriptionPlan: verifiedPlan,
                 subscriptionId,
@@ -2144,9 +2843,17 @@ export default function DashboardClient({
                 ),
               }));
               setShowPricingModal(false);
-              toast.success("Welcome to GetPGN Pro", {
-                description: `Pro is active instantly. ${formatProScanAllowance(verifiedPlan)}.`,
-              });
+              toast.success(
+                verifiedPlan === "enterprise"
+                  ? "Welcome to GetPGN Enterprise"
+                  : "Welcome to GetPGN Pro",
+                {
+                  description:
+                    verifiedPlan === "enterprise"
+                      ? `Enterprise is active. ${formatProScanAllowance(verifiedPlan)}.`
+                      : `Pro is active instantly. ${formatProScanAllowance(verifiedPlan)}.`,
+                },
+              );
             }
             router.refresh();
           } finally {
@@ -2333,6 +3040,7 @@ export default function DashboardClient({
         monthlyScanMonth: null,
       }));
       setGames([]);
+      setGamesTotal(0);
       handleReset();
       toast.success("Dev: reverted to Free plan");
       router.refresh();
@@ -2378,208 +3086,46 @@ export default function DashboardClient({
     }
   };
 
-  const renderAccountIdentityCard = () => (
-    <section className={`${PREMIUM_PANEL} p-4 sm:p-5 lg:px-6 lg:py-5 gp-fade-up shrink-0`}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <div className="relative shrink-0">
-            <UserAvatar name={user.username} size={52} />
-            {isPro ? (
-              <span
-                className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-paper border border-line-strong shadow-[var(--shadow-soft)]"
-                title="Pro member"
-              >
-                <Sparkles className="w-2.5 h-2.5 text-ink" />
-              </span>
-            ) : null}
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold text-ink tracking-tight truncate">
-              {user.username}
-            </h2>
-            {user.email ? (
-              <p className="mt-0.5 text-[13px] text-muted truncate">{user.email}</p>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:shrink-0 lg:border-l lg:border-line/50 lg:pl-6">
-          {isPro ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold py-0.5 pl-1.5 pr-2 rounded-full bg-ink text-paper">
-              <Sparkles className="w-2.5 h-2.5" />
-              GetPGN Pro
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold py-0.5 px-2 rounded-full bg-surface-2 border border-line-strong text-muted">
-              Free plan
-            </span>
-          )}
-          {isPro && user.subscriptionPlan ? (
-            <span className="text-[11px] text-muted capitalize">
-              {user.subscriptionPlan} billing
-            </span>
-          ) : null}
-          <span className="text-[11px] text-muted gp-nums">
-            · {scanUsage.remaining.toLocaleString()}/
-            {scanUsage.limit.toLocaleString()} scans left
-          </span>
+  const renderPrepaidPurchaseHistorySection = () => (
+    <section className="gp-account-cal-section">
+      <div className="gp-account-cal-row">
+        <div className="min-w-0 flex-1">
+          <p className="gp-account-cal-row__label">Prepaid purchase history</p>
+          <p className="gp-account-cal-row__hint">
+            One-time scan pack payments on your account.
+          </p>
         </div>
       </div>
+      <PrepaidPurchaseHistoryTable
+        purchases={organizerPurchases}
+        total={organizerPurchasesTotal}
+        hasMore={organizerPurchasesHasMore}
+        loadingMore={organizerPurchasesLoadingMore}
+        onLoadMore={() => void loadMoreOrganizerPurchases()}
+      />
     </section>
   );
 
-  const renderAccountProfileSection = () => (
-    <section
-      className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
-      style={{ animationDelay: "90ms" }}
-    >
-      <div className={PREMIUM_PANEL_HEAD}>
-        <ShieldCheck className="w-4 h-4 text-muted" />
-        <h2 className="font-semibold text-ink text-[14px] tracking-tight">
-          Profile &amp; security
-        </h2>
-      </div>
-      <div className="p-4 sm:p-5 grid grid-cols-1 gap-4 min-h-0">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleChangeUsername();
-          }}
-          className="gp-account-inset p-4 space-y-2.5"
-          aria-label="Change username"
-        >
-          <h3 className="text-[13px] font-semibold text-ink">Username</h3>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <div className="min-w-0">
-              <IconInput
-                id="account-username"
-                label="Username"
-                icon={<User className="h-4 w-4" />}
-                value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value)}
-                autoComplete="username"
-                maxLength={32}
-                placeholder="Your username"
-                disabled={savingUsername}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={
-                savingUsername ||
-                usernameInput.trim().length < 3 ||
-                usernameInput.trim() === user.username
-              }
-              className="shrink-0 h-[42px] py-2 px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-xl text-[12px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.99] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {savingUsername ? (
-                <Spinner size={14} />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              Save
-            </button>
-          </div>
-          {usernameInput.trim().length > 0 &&
-            usernameInput.trim().length < 3 && (
-              <p className="text-[11px] text-warn flex items-center gap-1.5">
-                <AlertCircle className="h-3.5 w-3.5" />
-                At least 3 characters.
-              </p>
-            )}
-        </form>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleChangePassword();
-          }}
-          className="gp-account-inset p-4 space-y-2.5"
-          aria-label="Change password"
-        >
-          <h3 className="text-[13px] font-semibold text-ink">Password</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div className="sm:col-span-2">
-              <IconInput
-                id="account-current-password"
-                label="Current password"
-                type="password"
-                icon={<Lock className="h-4 w-4" />}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-                placeholder="Current password"
-                disabled={savingPassword}
-              />
-            </div>
-            <IconInput
-              id="account-new-password"
-              label="New password"
-              type="password"
-              icon={<KeyRound className="h-4 w-4" />}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              placeholder="New password"
-              disabled={savingPassword}
-            />
-            <IconInput
-              id="account-confirm-password"
-              label="Confirm"
-              type="password"
-              icon={<KeyRound className="h-4 w-4" />}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              placeholder="Re-enter"
-              disabled={savingPassword}
-            />
-          </div>
-          {(newPassword.length > 0 && newPassword.length < 6) ||
-          (confirmPassword.length > 0 && newPassword !== confirmPassword) ? (
-            <p className="text-[11px] text-warn flex items-center gap-1.5">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {newPassword.length > 0 && newPassword.length < 6
-                ? "At least 6 characters."
-                : "Passwords don't match."}
-            </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={
-              savingPassword ||
-              !currentPassword ||
-              newPassword.length < 6 ||
-              newPassword !== confirmPassword
-            }
-            className="py-2 px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-xl text-[12px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.99] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {savingPassword ? (
-              <Spinner size={14} />
-            ) : (
-              <Lock className="h-3.5 w-3.5" />
-            )}
-            Update password
-          </button>
-        </form>
-      </div>
-    </section>
+  const renderAccountBillingPanel = () => (
+    <>
+      <OrganizerCreditsPanel
+        wallet={organizerAccount}
+        showSubscriptionNote={isPro || isEnterprise}
+      />
+      {isPro ? renderAccountProBillingBlock() : null}
+      {hasOrganizerWalletAccess ? renderPrepaidPurchaseHistorySection() : null}
+      {!isPro && !hasOrganizerWalletAccess
+        ? renderAccountBillingSection()
+        : null}
+    </>
   );
 
   const renderAccountBillingSection = () => (
-    <section
-      className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
-      style={{ animationDelay: "120ms" }}
-    >
-      <div className={PREMIUM_PANEL_HEAD}>
-        <Receipt className="w-4 h-4 text-muted" />
-        <h2 className="font-semibold text-ink text-[14px] tracking-tight">
-          Billing history
-        </h2>
-      </div>
+    <section className="gp-account-cal-section">
       {(() => {
         if (billingLoading) {
           return (
-            <div className="divide-y divide-line">
+            <div className="gp-account-cal-row">
               <BillingRowSkeleton />
             </div>
           );
@@ -2592,36 +3138,38 @@ export default function DashboardClient({
             isRealRazorpaySubscription(user));
         if (!hasBilling) {
           return (
-            <div className="px-4 sm:px-5 py-8 text-center space-y-3">
-              <span className="grid place-items-center w-10 h-10 mx-auto rounded-xl bg-surface-2 border border-line">
-                <Receipt className="w-4 h-4 text-muted-2" />
-              </span>
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold text-ink">
-                  No billing history yet
-                </p>
-                <p className="text-[11px] text-muted leading-relaxed max-w-sm mx-auto">
+            <div className="gp-account-cal-row">
+              <div className="min-w-0 flex-1">
+                <p className="gp-account-cal-row__label">Billing history</p>
+                <p className="gp-account-cal-row__hint">
                   {isPro
                     ? "Invoices appear here after checkout."
-                    : "Pro subscribers get invoices here after checkout."}
+                    : "Subscribe to Pro or buy prepaid scans to see billing here."}
                 </p>
               </div>
-              {!isPro && (
+              {!isPro ? (
                 <button
                   type="button"
                   onClick={() => setShowPricingModal(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-2 text-[12px] font-bold text-paper transition-all hover:bg-ink-soft active:scale-[0.98] cursor-pointer"
+                  className="gp-account-cal-row__action cursor-pointer"
                 >
-                  View Pro plans
+                  View plans
                 </button>
-              )}
+              ) : null}
             </div>
           );
         }
-        const isYearly = user.subscriptionPlan === "yearly";
         const isSimulated = user.paymentProvider === "simulated";
-        const amount = isSimulated ? "—" : isYearly ? "₹1,000" : "₹100";
-        const cycle = isYearly ? "Yearly" : "Monthly";
+        const amount = getSubscriptionAmount(
+          user.subscriptionPlan,
+          user.plan,
+          isSimulated,
+        );
+        const billingLabel = getSubscriptionBillingLabel(
+          user.subscriptionPlan,
+          user.plan,
+          { simulated: isSimulated },
+        );
         const dateStr = user.subscriptionStart
           ? new Date(user.subscriptionStart).toLocaleDateString("en-US", {
               dateStyle: "medium",
@@ -2632,369 +3180,278 @@ export default function DashboardClient({
           (user.subscriptionStatus === "active" ||
             user.subscriptionStatus === "cancelled");
         return (
-          <div>
-            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-3 px-5 py-2 border-b border-line text-[10px] font-bold uppercase tracking-wider text-muted-2">
-              <span>Description</span>
-              <span>Date</span>
-              <span className="text-right">Amount</span>
-              <span className="text-right">Status</span>
-            </div>
-            <div className="px-4 sm:px-5 py-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-2 items-center">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="grid place-items-center w-8 h-8 rounded-lg bg-ink text-paper shrink-0">
-                  <Sparkles className="w-3.5 h-3.5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-ink truncate">
-                    {isSimulated
-                      ? "GetPGN Pro — Dev simulation"
-                      : `GetPGN Pro — ${cycle}`}
-                  </p>
-                  <p className="text-[11px] text-muted">
-                    {isSimulated ? "Dev upgrade" : "Current subscription"}
-                  </p>
-                </div>
-              </div>
-              <div className="text-xs text-muted gp-nums flex items-center gap-1.5 sm:block">
-                <CalendarDays className="w-3.5 h-3.5 sm:hidden" />
-                {dateStr}
-              </div>
-              <div className="text-sm font-semibold text-ink gp-nums sm:text-right">
-                {amount}
-              </div>
-              <div className="sm:text-right">
-                <span
-                  className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                    isSimulated
-                      ? "bg-surface-2 border-line-strong text-muted"
-                      : paid
-                        ? "bg-positive-bg border-[#bbf7d0] text-positive"
-                        : "bg-surface-2 border-line-strong text-muted"
-                  }`}
-                >
-                  <span
-                    className={`inline-flex h-1.5 w-1.5 rounded-full ${isSimulated ? "bg-muted-2" : paid ? "bg-positive" : "bg-muted-2"}`}
-                  />
+          <>
+            <div className="gp-account-cal-row">
+              <div className="min-w-0 flex-1">
+                <p className="gp-account-cal-row__label">{billingLabel}</p>
+                <p className="gp-account-cal-row__hint">
+                  {dateStr} · {amount} ·{" "}
                   {isSimulated
                     ? "Simulated"
                     : paid
                       ? "Paid"
                       : user.subscriptionStatus || "Active"}
-                </span>
+                </p>
               </div>
+              {isPro ? (
+                <button
+                  type="button"
+                  onClick={handleDownloadInvoice}
+                  disabled={downloadingInvoice}
+                  className="gp-account-cal-row__action inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {downloadingInvoice ? (
+                    <Spinner size={12} />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  Invoice
+                </button>
+              ) : null}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pb-4 pt-0.5">
-              <p className="text-[11px] text-muted-2">
-                {isSimulated
-                  ? "Dev simulation — not a real charge."
-                  : "Active subscription invoice."}
-              </p>
-              <div className="flex items-center gap-2">
-                {isPro && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadInvoice}
-                    disabled={downloadingInvoice}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-paper px-3 py-1.5 text-[11px] font-semibold text-ink transition-colors hover:bg-surface-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {downloadingInvoice ? (
-                      <Spinner size={12} />
-                    ) : (
-                      <Download className="w-3.5 h-3.5" />
-                    )}
-                    Download PDF
-                  </button>
-                )}
-                {!isSimulated && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-2">
-                    <RazorpayLogo showWordmark={false} /> Razorpay
-                  </span>
-                )}
+            {!isSimulated ? (
+              <div className="gp-account-cal-row">
+                <p className="gp-account-cal-row__hint inline-flex items-center gap-1">
+                  <RazorpayLogo showWordmark={false} /> Razorpay
+                </p>
               </div>
-            </div>
-          </div>
+            ) : null}
+          </>
         );
       })()}
     </section>
   );
 
-  const renderAccountProBillingBlock = () => (
-    <section
-      className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
-      style={{ animationDelay: "120ms" }}
-    >
-      <div className={PREMIUM_PANEL_HEAD}>
-        <CreditCard className="w-4 h-4 text-muted" />
-        <h2 className="font-semibold text-ink text-[14px] tracking-tight">
-          Billing
-        </h2>
-      </div>
-      <div className="p-4 sm:px-5 sm:py-4">
-        <dl className="gp-billing-stat-grid text-[12px]">
-          <div className="gp-billing-stat">
-            <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
-              Plan
-            </dt>
-            <dd className="font-semibold text-ink flex items-center gap-1 mt-1">
-              Pro · {user.subscriptionPlan || "paid"}
-            </dd>
+  const renderAccountProBillingBlock = () => {
+    const statusLabel =
+      user.subscriptionStatus === "authenticated"
+        ? "Scheduled"
+        : user.subscriptionStatus || "active";
+    const renewalLabel =
+      user.subscriptionStatus === "cancelled"
+        ? "Access until"
+        : user.subscriptionStatus === "authenticated"
+          ? "First charge"
+          : "Renews on";
+    const renewalDate =
+      user.subscriptionEnd
+        ? new Date(
+            user.subscriptionStatus === "authenticated" && user.subscriptionStart
+              ? user.subscriptionStart
+              : user.subscriptionEnd,
+          ).toLocaleDateString("en-US", { dateStyle: "medium" })
+        : user.subscriptionStatus === "authenticated" && user.subscriptionStart
+          ? new Date(user.subscriptionStart).toLocaleDateString("en-US", {
+              dateStyle: "medium",
+            })
+          : "—";
+    const isSimulated = user.paymentProvider === "simulated";
+    const amount = getSubscriptionAmount(
+      user.subscriptionPlan,
+      user.plan,
+      isSimulated,
+    );
+    const billingLabel = getSubscriptionBillingLabel(
+      user.subscriptionPlan,
+      user.plan,
+      { simulated: isSimulated },
+    );
+    const dateStr = user.subscriptionStart
+      ? new Date(user.subscriptionStart).toLocaleDateString("en-US", {
+          dateStyle: "medium",
+        })
+      : "—";
+    const paid =
+      !isSimulated &&
+      (user.subscriptionStatus === "active" ||
+        user.subscriptionStatus === "cancelled");
+
+    return (
+      <section className="gp-account-cal-section">
+        <div className="gp-account-cal-row">
+          <div className="min-w-0 flex-1">
+            <p className="gp-account-cal-row__label">Subscription</p>
+            <p className="gp-account-cal-row__hint">
+              Your recurring plan and billing details.
+            </p>
           </div>
-          <div className="gp-billing-stat">
-            <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
-              Status
-            </dt>
-            <dd className="font-semibold text-ink mt-1">
-              <span
-                className={`inline-flex items-center gap-1.5 ${
-                  user.subscriptionStatus === "cancelled" ||
-                  user.subscriptionStatus === "paused"
-                    ? "text-warn"
-                    : user.subscriptionStatus === "authenticated"
-                      ? "text-muted"
-                      : ""
-                }`}
-              >
-                <span
-                  className={`inline-flex h-1.5 w-1.5 rounded-full ${
-                    user.subscriptionStatus === "cancelled" ||
-                    user.subscriptionStatus === "paused"
-                      ? "bg-warn"
-                      : user.subscriptionStatus === "authenticated"
-                        ? "bg-muted-2"
-                        : "bg-positive"
-                  }`}
-                />
-                <span className="capitalize">
-                  {user.subscriptionStatus === "authenticated"
-                    ? "Scheduled"
-                    : user.subscriptionStatus || "active"}
-                </span>
-              </span>
-            </dd>
+        </div>
+
+        <div className="gp-account-cal-row">
+          <div className="min-w-0 flex-1">
+            <p className="gp-account-cal-row__label">Plan</p>
+            <p className="mt-2 text-[14px] text-ink">
+              {getSubscriptionPlanShort(user.subscriptionPlan, user.plan)}
+              {!isEnterprise && user.subscriptionPlan
+                ? ` · ${user.subscriptionPlan}`
+                : null}
+            </p>
           </div>
-          <div className="gp-billing-stat">
-            <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
-              Provider
-            </dt>
-            <dd className="text-ink mt-1">
+        </div>
+
+        <div className="gp-account-cal-row">
+          <div className="min-w-0 flex-1">
+            <p className="gp-account-cal-row__label">Status</p>
+            <p className="mt-2 text-[14px] capitalize text-ink">{statusLabel}</p>
+          </div>
+        </div>
+
+        <div className="gp-account-cal-row">
+          <div className="min-w-0 flex-1">
+            <p className="gp-account-cal-row__label">Provider</p>
+            <p className="mt-2 text-[14px] text-ink">
               {user.paymentProvider === "simulated" ? (
-                <span className="text-muted">Dev simulation</span>
+                "Dev simulation"
               ) : (
                 <RazorpayLogo showWordmark={false} />
               )}
-            </dd>
-          </div>
-          {user.subscriptionEnd ? (
-            <div className="gp-billing-stat">
-              <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
-                {user.subscriptionStatus === "cancelled"
-                  ? "Access until"
-                  : user.subscriptionStatus === "authenticated"
-                    ? "First charge"
-                    : "Renews on"}
-              </dt>
-              <dd className="font-semibold text-ink gp-nums mt-1">
-                {new Date(
-                  user.subscriptionStatus === "authenticated" && user.subscriptionStart
-                    ? user.subscriptionStart
-                    : user.subscriptionEnd,
-                ).toLocaleDateString("en-US", {
-                  dateStyle: "medium",
-                })}
-              </dd>
-            </div>
-          ) : user.subscriptionStatus === "authenticated" && user.subscriptionStart ? (
-            <div className="gp-billing-stat">
-              <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
-                First charge
-              </dt>
-              <dd className="font-semibold text-ink gp-nums mt-1">
-                {new Date(user.subscriptionStart).toLocaleDateString("en-US", {
-                  dateStyle: "medium",
-                })}
-              </dd>
-            </div>
-          ) : (
-            <div className="gp-billing-stat">
-              <dt className="text-[10px] text-muted font-bold uppercase tracking-[0.12em]">
-                Renews on
-              </dt>
-              <dd className="font-semibold text-muted mt-1">—</dd>
-            </div>
-          )}
-        </dl>
-        {isRealRazorpaySubscription(user) && (
-          <p className="mt-2 text-[10px] font-mono text-muted truncate">
-            {user.subscriptionId}
-          </p>
-        )}
-        {user.subscriptionStatus === "authenticated" && user.subscriptionStart && (
-          <p className="mt-2 text-[11px] text-muted leading-snug flex items-start gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 text-muted shrink-0 mt-px" />
-            Autopay is set up. Pro stays on until{" "}
-            {user.subscriptionEnd
-              ? formatBillingDate(user.subscriptionEnd)
-              : "your current period ends"}
-            . Your plan payment will be automatically deducted on{" "}
-            {formatBillingDate(user.subscriptionStart)}.
-          </p>
-        )}
-        {user.subscriptionStatus === "cancelled" && user.subscriptionEnd && (
-          <p className="mt-2 text-[11px] text-muted leading-snug flex items-start gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 text-warn shrink-0 mt-px" />
-            Cancelled — Pro access until{" "}
-            {new Date(user.subscriptionEnd).toLocaleDateString("en-US", {
-              dateStyle: "medium",
-            })}
-            .
-          </p>
-        )}
-        {user.subscriptionStatus === "paused" && (
-          <p className="mt-2 text-[11px] text-muted leading-snug flex items-start gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 text-warn shrink-0 mt-px" />
-            Paused — billing is on hold and Pro access is suspended until you
-            resume.
-          </p>
-        )}
-        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "active" && (
-          <button
-            onClick={() => setShowCancelConfirm(true)}
-            disabled={billingLoading}
-            className="mt-2.5 py-1.5 px-3.5 bg-paper hover:bg-danger-bg border border-line-strong hover:border-[#fbcfe3] text-muted hover:text-danger font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Cancel subscription
-          </button>
-        )}
-        {/* Pause/resume hidden for now — APIs and webhooks remain wired.
-        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "active" && (
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            <button
-              onClick={() => setShowPauseConfirm(true)}
-              disabled={billingLoading}
-              className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-paper hover:bg-surface border border-line-strong text-muted hover:text-ink font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <Pause className="w-3 h-3" />
-              Pause subscription
-            </button>
-          </div>
-        )}
-        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "paused" && (
-          <button
-            onClick={handleResumeSubscription}
-            disabled={billingLoading}
-            className="mt-2.5 inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-ink hover:bg-ink/90 text-paper font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
-          >
-            <Play className="w-3 h-3" />
-            Resume subscription
-          </button>
-        )}
-        */}
-        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "cancelled" && (
-          <div className="mt-2.5 space-y-2">
-            <p className="text-[11px] text-muted leading-snug">
-              Your subscription won&apos;t renew. Pro stays on until the date
-              above. Resubscribe to set up autopay (₹1 mandate today) — your plan
-              payment will auto-debit on{" "}
-              {user.subscriptionEnd ? formatBillingDate(user.subscriptionEnd) : "that date"}
-              .
             </p>
+          </div>
+        </div>
+
+        <div className="gp-account-cal-row">
+          <div className="min-w-0 flex-1">
+            <p className="gp-account-cal-row__label">{renewalLabel}</p>
+            <p className="mt-2 text-[14px] tabular-nums text-ink gp-nums">
+              {renewalDate}
+            </p>
+          </div>
+        </div>
+
+        {isRealRazorpaySubscription(user) ? (
+          <div className="gp-account-cal-row">
+            <div className="min-w-0 flex-1">
+              <p className="gp-account-cal-row__label">Subscription ID</p>
+              <p className="mt-2 truncate font-mono text-[12px] text-muted">
+                {user.subscriptionId}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {user.subscriptionStatus === "authenticated" && user.subscriptionStart ? (
+          <div className="gp-account-cal-row">
+            <p className="gp-account-cal-row__hint flex items-start gap-1.5">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Autopay is set up. Pro stays on until{" "}
+              {user.subscriptionEnd
+                ? formatBillingDate(user.subscriptionEnd)
+                : "your current period ends"}
+              . Your plan payment will be automatically deducted on{" "}
+              {formatBillingDate(user.subscriptionStart)}.
+            </p>
+          </div>
+        ) : null}
+
+        {user.subscriptionStatus === "cancelled" && user.subscriptionEnd ? (
+          <div className="gp-account-cal-row">
+            <div className="min-w-0 flex-1">
+              <p className="gp-account-cal-row__hint flex items-start gap-1.5">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
+                Cancelled — Pro access until{" "}
+                {new Date(user.subscriptionEnd).toLocaleDateString("en-US", {
+                  dateStyle: "medium",
+                })}
+                .
+              </p>
+              {isRealRazorpaySubscription(user) ? (
+                <p className="gp-account-cal-row__hint mt-2">
+                  Your subscription won&apos;t renew. Resubscribe to set up autopay
+                  — your plan payment will auto-debit on{" "}
+                  {formatBillingDate(user.subscriptionEnd)}.
+                </p>
+              ) : null}
+            </div>
+            {isRealRazorpaySubscription(user) ? (
+              <button
+                type="button"
+                onClick={() => setShowPricingModal(true)}
+                disabled={billingLoading}
+                className="gp-account-cal-row__action inline-flex items-center gap-1 disabled:opacity-50"
+              >
+                Resubscribe
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {user.subscriptionStatus === "paused" ? (
+          <div className="gp-account-cal-row">
+            <p className="gp-account-cal-row__hint flex items-start gap-1.5">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
+              Paused — billing is on hold and Pro access is suspended until you
+              resume.
+            </p>
+          </div>
+        ) : null}
+
+        {isRealRazorpaySubscription(user) && user.subscriptionStatus === "active" ? (
+          <div className="gp-account-cal-row">
+            <div className="min-w-0 flex-1">
+              <p className="gp-account-cal-row__label">Cancel subscription</p>
+              <p className="gp-account-cal-row__hint">
+                You keep access until the end of the current billing period.
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => setShowPricingModal(true)}
+              onClick={() => setShowCancelConfirm(true)}
               disabled={billingLoading}
-              className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-ink hover:bg-ink/90 text-paper font-medium rounded-lg text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+              className="gp-account-cal-row__action text-warn hover:text-warn disabled:opacity-50"
             >
-              Resubscribe
-              <ArrowUpRight className="w-3 h-3" />
+              Cancel
+            </button>
+          </div>
+        ) : null}
+
+        <div className="gp-account-cal-row">
+          <div className="min-w-0 flex-1">
+            <p className="gp-account-cal-row__label">Subscription invoice</p>
+            <p className="gp-account-cal-row__hint">
+              {isSimulated
+                ? "Dev simulation — not a real charge."
+                : "Tax invoice / receipt for your subscription."}
+            </p>
+          </div>
+        </div>
+
+        {billingLoading ? (
+          <div className="gp-account-cal-row">
+            <BillingRowSkeleton />
+          </div>
+        ) : (
+          <div className="gp-account-cal-row">
+            <div className="min-w-0 flex-1">
+              <p className="gp-account-cal-row__label">{billingLabel}</p>
+              <p className="gp-account-cal-row__hint">
+                {dateStr} · {amount} ·{" "}
+                {isSimulated
+                  ? "Simulated"
+                  : paid
+                    ? "Paid"
+                    : user.subscriptionStatus || "Active"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadInvoice}
+              disabled={downloadingInvoice}
+              className="gp-account-cal-row__action inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {downloadingInvoice ? (
+                <Spinner size={12} />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              Download
             </button>
           </div>
         )}
-      </div>
-      <div className="border-t border-line/60">
-        <div className="px-4 sm:px-5 py-2.5 border-b border-line/60 bg-surface-2/25 flex items-center gap-2">
-          <Receipt className="w-3.5 h-3.5 text-muted" />
-          <h3 className="font-medium text-ink text-[13px] tracking-tight">
-            History
-          </h3>
-        </div>
-        {billingLoading ? (
-          <BillingRowSkeleton />
-        ) : (
-          (() => {
-            const isYearly = user.subscriptionPlan === "yearly";
-            const isSimulated = user.paymentProvider === "simulated";
-            const amount = isSimulated ? "—" : isYearly ? "₹1,000" : "₹100";
-            const cycle = isYearly ? "Yearly" : "Monthly";
-            const dateStr = user.subscriptionStart
-              ? new Date(user.subscriptionStart).toLocaleDateString("en-US", {
-                  dateStyle: "medium",
-                })
-              : "—";
-            const paid =
-              !isSimulated &&
-              (user.subscriptionStatus === "active" ||
-                user.subscriptionStatus === "cancelled");
-            return (
-              <>
-                <div className="gp-history-row px-4 sm:px-5 py-3 grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1.5 items-center">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="grid place-items-center w-8 h-8 rounded-xl bg-ink text-paper shrink-0">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </span>
-                    <span className="text-[12px] font-semibold text-ink truncate">
-                      GetPGN Pro — {cycle}
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-muted gp-nums">{dateStr}</span>
-                  <span className="text-[12px] font-semibold text-ink gp-nums sm:text-right">
-                    {amount}
-                  </span>
-                  <span className="hidden sm:inline-flex justify-end">
-                    <span
-                      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                        paid
-                          ? "bg-positive-bg border-[#bbf7d0] text-positive"
-                          : "bg-surface-2 border-line-strong text-muted"
-                      }`}
-                    >
-                      <span
-                        className={`inline-flex h-1.5 w-1.5 rounded-full ${paid ? "bg-positive" : "bg-muted-2"}`}
-                      />
-                      {isSimulated
-                        ? "Simulated"
-                        : paid
-                          ? "Paid"
-                          : user.subscriptionStatus || "Active"}
-                    </span>
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pb-3.5">
-                  <p className="text-[10px] text-muted-2">
-                    {isSimulated
-                      ? "Dev simulation invoice available for testing."
-                      : "Tax invoice / receipt for your subscription."}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleDownloadInvoice}
-                    disabled={downloadingInvoice}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[11px] font-bold text-paper transition-colors hover:bg-ink-soft active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {downloadingInvoice ? (
-                      <Spinner size={12} />
-                    ) : (
-                      <Download className="w-3.5 h-3.5" />
-                    )}
-                    Download PDF
-                  </button>
-                </div>
-              </>
-            );
-          })()
-        )}
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
+
 
   const handleLogout = () => {
     forceLogout();
@@ -3021,101 +3478,84 @@ export default function DashboardClient({
     toast.success("Thanks for the feedback!");
   };
 
-  const handleChangeUsername = async () => {
-    const next = usernameInput.trim();
-    if (savingUsername || next.length < 3 || next === user.username) return;
-    setSavingUsername(true);
-    try {
-      const res = await fetch("/api/auth/change-username", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: next }),
-      });
-      if (!res.ok) {
-        const apiErr = await readApiErrorOrLogout(
-          res,
-          "We couldn't update your username. Please try again.",
-        );
-        if (apiErr === null) return;
-        throw new Error(apiErr);
-      }
-      const data = await res.json();
-      const updated = typeof data.username === "string" ? data.username : next;
-      // Server refreshed the session; reflect the new name everywhere in the UI.
-      setUser((prev) => ({ ...prev, username: updated }));
-      setUsernameInput(updated);
-      toast.success("Username updated.");
-    } catch (err: unknown) {
-      toast.error(
-        friendlyError(
-          err,
-          "We couldn't update your username. Please try again.",
-        ),
-      );
-    } finally {
-      setSavingUsername(false);
-    }
-  };
+  const footerCompact = isPinnedWorkspace || isAccountView;
 
-  const handleChangePassword = async () => {
-    if (savingPassword) return;
-    if (!currentPassword || !newPassword) {
-      toast.error("Please enter your current and new password.");
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast.error("Your new password must be at least 6 characters.");
-      return;
-    }
-    if (newPassword === currentPassword) {
-      toast.error("Your new password must be different from your current one.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match.");
-      return;
-    }
-    setSavingPassword(true);
-    try {
-      const res = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      if (!res.ok) {
-        const apiErr = await readApiErrorOrLogout(
-          res,
-          "We couldn't update your password. Please try again.",
-        );
-        if (apiErr === null) return;
-        throw new Error(apiErr);
-      }
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      toast.success("Password updated.");
-    } catch (err: unknown) {
-      toast.error(
-        friendlyError(
-          err,
-          "We couldn't update your password. Please try again.",
-        ),
-      );
-    } finally {
-      setSavingPassword(false);
-    }
-  };
+  const dashboardFooter = (
+    <footer className="shrink-0 border-t border-line bg-surface/25">
+      <div
+        className={`${DASHBOARD_SHELL} flex flex-col px-4 sm:px-6 md:px-8 ${
+          footerCompact ? "gap-2 py-3 sm:py-3.5" : "gap-4 py-6"
+        }`}
+      >
+        {footerCompact ? (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <LegalTrustLinks className="text-left leading-snug" />
+            <nav
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] lg:justify-end"
+              aria-label="Legal and support"
+            >
+              <LegalLink href="/privacy">Privacy</LegalLink>
+              <LegalLink href="/terms">Terms</LegalLink>
+              <LegalLink href="/refund">Refunds</LegalLink>
+              <a href={`mailto:${LEGAL.contactEmail}`} className="legal-link">
+                {LEGAL.contactEmail}
+              </a>
+            </nav>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <LegalTrustLinks className="text-left leading-snug" />
+              <nav
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] lg:justify-end"
+                aria-label="Legal and support"
+              >
+                <LegalLink href="/privacy">Privacy Policy</LegalLink>
+                <LegalLink href="/terms">Terms</LegalLink>
+                <LegalLink href="/refund">Refund Policy</LegalLink>
+                <a href={`mailto:${LEGAL.contactEmail}`} className="legal-link">
+                  {LEGAL.contactEmail}
+                </a>
+              </nav>
+            </div>
+            <div className="flex flex-col items-center gap-2 border-t border-line/50 pt-4 text-center text-[12px] text-muted lg:flex-row lg:items-center lg:justify-between lg:text-left">
+              <span>
+                © {new Date().getFullYear()} GetPGN · Chess scoresheet digitizer
+              </span>
+              <span>
+                Built by Chess Coaches. Powered by ABCChess Education LLP.
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </footer>
+  );
 
   return (
-    <div className="flex flex-col min-h-screen bg-paper text-ink">
+    <div
+      className={`bg-paper text-ink ${
+        isAccountView
+          ? "flex h-dvh max-h-dvh flex-col overflow-hidden"
+          : `flex flex-col ${
+              isPinnedWorkspace
+                ? "min-h-screen lg:h-dvh lg:max-h-dvh lg:overflow-hidden"
+                : "min-h-screen"
+            }`
+      }`}
+    >
       {/* ── Header ── */}
-      <header className="px-4 sm:px-6 md:px-8 bg-paper/90 backdrop-blur-md border-b border-line sticky top-0 z-40">
+      <header
+        className={`shrink-0 px-4 sm:px-6 md:px-8 bg-paper/90 backdrop-blur-md border-b border-line z-40 ${
+          isAccountView ? "" : "sticky top-0"
+        }`}
+      >
         <div
           className={`${DASHBOARD_SHELL} flex items-center justify-between h-16`}
         >
           <div className="flex items-center gap-4 sm:gap-7">
             <button
-              onClick={() => setActiveTab("dashboard")}
+              onClick={goToDashboard}
               className="group/logo -ml-1.5 cursor-pointer rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2"
               title="Dashboard"
               aria-label="Go to dashboard"
@@ -3127,7 +3567,7 @@ export default function DashboardClient({
             <div className="flex items-center gap-2 sm:gap-3">
               <button
                 type="button"
-                onClick={() => !isPro && setShowPricingModal(true)}
+                onClick={() => !isPremium && setShowPricingModal(true)}
                 className="hidden sm:flex items-center gap-2 rounded-full border border-line-strong bg-surface pl-2.5 pr-3 py-1.5 text-[12px] text-muted transition-colors hover:border-ink hover:text-ink cursor-pointer"
                 title="Scan usage"
               >
@@ -3157,8 +3597,8 @@ export default function DashboardClient({
                       className={scansExhausted ? "text-danger" : "text-ink"}
                     />
                   </svg>
-                  <span className="text-[10px] font-bold text-ink gp-nums">
-                    {scanUsage.remaining > 99 ? "99+" : scanUsage.remaining}
+                  <span className="max-w-[2rem] truncate text-[9px] font-bold leading-none text-ink gp-nums">
+                    {formatScanRemaining(scanUsage.remaining)}
                   </span>
                 </span>
                 <span>
@@ -3167,17 +3607,21 @@ export default function DashboardClient({
                     {scanUsage.limit.toLocaleString()}
                   </strong>{" "}
                   scans
-                  {isPro ? (scanUsage.periodUnit === "year" ? "/yr" : "/mo") : ""}
+                  {isPro && scanUsage.tier === "pro"
+                    ? scanUsage.periodUnit === "year"
+                      ? "/yr"
+                      : "/mo"
+                    : ""}
                 </span>
               </button>
               <button
                 type="button"
-                onClick={() => !isPro && setShowPricingModal(true)}
+                onClick={() => !isPremium && setShowPricingModal(true)}
                 className={`text-[12px] text-muted flex sm:hidden items-center gap-1.5 ${
-                  !isPro ? "cursor-pointer rounded-full px-2 py-1 -mr-1 hover:bg-surface-2" : ""
+                  !isPremium ? "cursor-pointer rounded-full px-2 py-1 -mr-1 hover:bg-surface-2" : ""
                 }`}
-                title={!isPro ? "View plans" : "Scan usage"}
-                aria-label={!isPro ? "View upgrade plans" : "Scan usage"}
+                title={!isPremium ? "View plans" : "Scan usage"}
+                aria-label={!isPremium ? "View upgrade plans" : "Scan usage"}
               >
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-ink/70" />
                 <strong className="text-ink gp-nums">
@@ -3185,7 +3629,7 @@ export default function DashboardClient({
                   {scanUsage.limit.toLocaleString()}
                 </strong>
               </button>
-              {!isPro && (
+              {!isPremium && (
                 <button
                   onClick={() => setShowPricingModal(true)}
                   disabled={billingLoading}
@@ -3218,57 +3662,83 @@ export default function DashboardClient({
                 )}
               </div>
             )}
+            <ThemeToggle />
             <UserMenu
               username={user.username}
               email={user.email}
+              avatarPiece={user.avatarPiece}
               isPro={!!isPro}
-              onAccount={() => setActiveTab("account")}
+              isEnterprise={isEnterpriseDisplay}
+              hasOrganizerWallet={hasOrganizerWalletAccess}
+              onAccount={goToAccount}
+              onLogout={() => setShowLogoutConfirm(true)}
             />
-            <span
-              className="hidden md:block h-6 w-px bg-line-strong"
-              aria-hidden="true"
-            />
-            <button
-              type="button"
-              onClick={() => setShowLogoutConfirm(true)}
-              className="btn-ghost grid h-9 w-9 shrink-0 place-items-center rounded-lg p-0 text-muted hover:text-ink"
-              title="Log out"
-              aria-label="Log out"
-            >
-              <LogOut className="h-[18px] w-[18px]" />
-            </button>
+            <div className="hidden items-center md:flex">
+              <span
+                className="h-6 w-px bg-line-strong"
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(true)}
+                className="btn-ghost grid h-9 w-9 shrink-0 place-items-center rounded-lg p-0 text-muted hover:text-ink"
+                title="Log out"
+                aria-label="Log out"
+              >
+                <LogOut className="h-[18px] w-[18px]" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* ── Dashboard Body ── */}
-      {activeTab === "dashboard" ? (
+      {workspaceView !== "account" ? (
         <main
-          className={`${DASHBOARD_SHELL} flex min-h-0 flex-1 gap-7 px-4 py-8 sm:px-6 md:px-8 ${appState === "upload" ? "relative" : "items-stretch"}`}
+          className={`${DASHBOARD_SHELL} flex min-h-0 flex-1 flex-col gap-7 px-4 sm:px-6 md:px-8 ${
+            isPinnedWorkspace ? "md:flex-row" : ""
+          } ${
+            isPinnedWorkspace
+              ? "overflow-y-auto py-4 lg:overflow-hidden sm:py-5 md:py-6"
+              : "overflow-y-auto py-8 lg:overflow-visible"
+          }`}
         >
-          {/* Sidebar — hidden on upload; skeleton while session restores */}
+          {/* Sidebar on game route or in-dashboard review */}
           {!workspaceReady ? (
-            <div className={`${appState === "upload" ? "hidden" : "hidden md:block"}`}>
+            <div
+              className={`${
+                workspaceView === "game" || appState !== "upload"
+                  ? "hidden md:block"
+                  : "hidden"
+              }`}
+            >
               <SidebarRestoreSkeleton />
             </div>
           ) : (
           <aside
-            className={`w-72 flex-shrink-0 flex-col gap-3 ${appState === "upload" ? "hidden" : "hidden md:flex"}`}
+            className={`hidden h-full w-72 min-h-0 shrink-0 flex-col gap-3 overflow-hidden ${
+              isPinnedWorkspace ? "md:flex" : ""
+            }`}
           >
-            {renderSavedGamesPanel()}
+            <div className="flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
+              {renderSavedGamesPanel()}
+            </div>
             {appState !== "upload" && (
               <ExportPanel
                 section="share"
                 pgn={pgn}
                 gameIsValid={gameIsValid}
-                isPaid={!!isPro}
+                isPaid={!!isPremium}
                 gameId={activeGameId}
+                isDraftGame={activeGameIsDraft}
                 initialSharedSlug={activeGameSharedSlug}
+                hasUnsavedChanges={gameHasUnsavedChanges}
+                saveMeta={persistedGameMeta}
                 onSave={handleSaveGame}
                 onShare={handleShareGame}
               />
             )}
-            {isPro && (
+            {isPremium && (
               <button
                 onClick={handleReset}
                 className="w-full py-2.5 bg-paper border border-line-strong hover:border-muted-2 hover:bg-surface-2 text-muted hover:text-ink rounded-xl text-xs font-semibold transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
@@ -3313,101 +3783,26 @@ export default function DashboardClient({
                 </button>
               </div>
             )}
-            {appState === "review" &&
-              turns.length > 0 &&
-              (() => {
-                const snap = getGameSnapshot();
-                return (
-                  <div className="bg-surface border border-line rounded-2xl p-4 gp-fade-up">
-                    <div className="mb-3 flex items-center gap-2">
-                      <LayoutGrid className="h-3.5 w-3.5 text-muted-2" />
-                      <h2 className="font-semibold text-[11px] text-muted-2 uppercase tracking-widest">
-                        Game snapshot
-                      </h2>
-                    </div>
-                    <p
-                      className="mb-3 truncate text-[13px] font-semibold text-ink"
-                      title={snap.title}
-                    >
-                      {snap.title}
-                    </p>
-                    <dl className="space-y-2 text-[12px]">
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-muted">Turns</dt>
-                        <dd className="font-medium text-ink gp-nums">
-                          {snap.turnCount}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-muted">Position</dt>
-                        <dd className="font-medium text-ink gp-nums">
-                          {snap.currentPly === 0
-                            ? "Start"
-                            : `${snap.currentPly} / ${snap.totalPlies}`}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-muted">Valid moves</dt>
-                        <dd className="font-medium text-positive gp-nums">
-                          {snap.valid}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-muted">Flagged</dt>
-                        <dd
-                          className={`font-medium gp-nums ${snap.flagged > 0 ? "text-warn" : "text-ink"}`}
-                        >
-                          {snap.flagged}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line pt-3">
-                      {snap.isSaved ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-line-strong bg-paper px-2 py-0.5 text-[11px] font-medium text-muted">
-                          <Check className="h-3 w-3 text-positive" /> Saved
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-line-strong bg-paper px-2 py-0.5 text-[11px] font-medium text-muted-2">
-                          Unsaved
-                        </span>
-                      )}
-                      {snap.isShared && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-line-strong bg-paper px-2 py-0.5 text-[11px] font-medium text-muted">
-                          <Share2 className="h-3 w-3" /> Shared
-                        </span>
-                      )}
-                      {snap.hasImage && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-line-strong bg-paper px-2 py-0.5 text-[11px] font-medium text-muted">
-                          <ImageIcon className="h-3 w-3" /> Scoresheet
-                        </span>
-                      )}
-                      {snap.gameIsValid ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[#bbf7d0] bg-positive-bg px-2 py-0.5 text-[11px] font-medium text-positive">
-                          Validated
-                        </span>
-                      ) : snap.flagged > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-warn-bg px-2 py-0.5 text-[11px] font-medium text-warn">
-                          <AlertCircle className="h-3 w-3" /> Needs review
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })()}
           </aside>
           )}
 
           {/* Main Workspace */}
-          <section className="flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-y-auto">
+          <section
+            className={`flex min-h-0 min-w-0 flex-col ${
+              isPinnedWorkspace
+                ? "flex-1 overflow-visible lg:overflow-hidden"
+                : "lg:flex-1 lg:h-full lg:overflow-y-auto"
+            }`}
+          >
             {!workspaceReady ? (
               <WorkspaceRestoreSkeleton />
             ) : (
               <>
                 {/* UPLOAD VIEW */}
-                {appState === "upload" && (
+                {(workspaceView === "upload" && appState === "upload") && (
                   <div
-                    className={`flex w-full flex-col overflow-y-auto py-6 pr-1 sm:py-10 ${
-                      isPro ? "items-stretch" : "items-center"
+                    className={`flex w-full flex-col py-6 pr-1 sm:py-10 ${
+                      isPremium ? "items-stretch" : "items-center"
                     }`}
                   >
                     {renderUploadScreen()}
@@ -3415,13 +3810,14 @@ export default function DashboardClient({
                 )}
 
                 {/* REVIEW WORKSPACE */}
-                {appState === "review" && (
-                  <div className="flex min-h-0 flex-1 flex-col gap-5 gp-fade-in pb-2">
+                {isPinnedWorkspace && (
+                  <div className="flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:gap-4">
                     {/* Toolbar */}
-                    <div className="card flex shrink-0 items-center justify-between px-4 py-2.5">
+                    <div className="card flex h-11 shrink-0 items-center justify-between px-4 py-2.5">
                       <button
                         onClick={handleReset}
-                        className="btn-secondary btn-sm"
+                        disabled={isLeavingWorkspace}
+                        className="btn-secondary btn-sm disabled:opacity-60"
                       >
                         <ArrowLeft className="h-3.5 w-3.5" /> Back to upload
                       </button>
@@ -3440,26 +3836,46 @@ export default function DashboardClient({
 
                     <MobileShareBar
                       pgn={pgn}
-                      isPaid={!!isPro}
+                      isPaid={!!isPremium}
                       gameId={activeGameId}
+                      isDraftGame={activeGameIsDraft}
                       sharedSlug={activeGameSharedSlug}
+                      saveMeta={persistedGameMeta}
                       onSave={handleSaveGame}
                       onShare={handleShareGame}
                     />
 
-                    {/* panel grid — mobile: board → move sheet → PGN; lg: board+PGN | move sheet */}
-                    <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]">
-                      {/* Board */}
-                      <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
-                        <div
-                          ref={boardCardRef}
-                          className="card shrink-0 overflow-hidden p-0"
-                        >
-                          <div className="space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
+                    {/* panel grid — mobile: board → move sheet → PGN; lg: fixed-height columns */}
+                    <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)] lg:items-stretch lg:gap-5">
+                      {/* Board column */}
+                      <div className="order-1 flex min-w-0 flex-col gap-3 lg:min-h-0 lg:overflow-hidden">
+                        <div className="card flex flex-col overflow-hidden p-0 lg:min-h-0 lg:flex-1">
+                          <div className="shrink-0 space-y-2.5 border-b border-line px-4 py-3 sm:px-5">
                             <div className="flex items-center justify-between gap-3">
-                              <h3 className="text-[15px] font-semibold text-ink">
-                                Visual replay
-                              </h3>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-medium leading-none text-muted-2">
+                                  Visual replay
+                                </p>
+                                <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                                  <h3
+                                    className="min-w-0 truncate text-[15px] font-semibold leading-snug text-ink sm:text-[16px]"
+                                    title={displayGameMeta.title}
+                                  >
+                                    {displayGameMeta.title}
+                                  </h3>
+                                  {canEditGameMeta ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowGameMetaEdit(true)}
+                                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-paper text-muted transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-ink cursor-pointer"
+                                      aria-label="Edit game title and players"
+                                      title="Edit game details"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -3472,7 +3888,7 @@ export default function DashboardClient({
                                 className="btn-secondary btn-sm shrink-0 px-2.5 sm:px-3"
                                 title="Flip board perspective"
                               >
-                                <RotateCw className="h-3.5 w-3.5" />
+                                <ArrowLeftRight className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">
                                   Flip board
                                 </span>
@@ -3483,7 +3899,7 @@ export default function DashboardClient({
                                 getBoardStatus();
                               return (
                                 <>
-                                  <p className="min-h-[18px] text-[12px] leading-snug text-muted">
+                                  <p className="min-h-[1.625rem] text-[12px] leading-snug text-muted">
                                     <span className="gp-nums">
                                       {positionLabel}
                                     </span>
@@ -3495,25 +3911,26 @@ export default function DashboardClient({
                                       ·{" "}
                                     </span>
                                     <span>{sideToMove} to move</span>
-                                    {checkInfo ? (
-                                      <span
-                                        className={`ml-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle ${
-                                          checkInfo.type === "checkmate"
+                                    <span
+                                      className={`ml-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold align-middle ${
+                                        checkInfo
+                                          ? checkInfo.type === "checkmate"
                                             ? "border-[#fbcfe3] bg-danger-bg text-danger"
                                             : "border-amber-200 bg-warn-bg text-warn"
-                                        }`}
-                                      >
-                                        {checkInfo.type === "checkmate"
-                                          ? "Checkmate"
-                                          : "Check"}
-                                      </span>
-                                    ) : null}
+                                          : "pointer-events-none border-transparent opacity-0"
+                                      }`}
+                                      aria-hidden={!checkInfo}
+                                    >
+                                      {checkInfo?.type === "checkmate"
+                                        ? "Checkmate"
+                                        : "Check"}
+                                    </span>
                                   </p>
                                   <div className="flex items-center gap-2">
                                     <BoardThemePicker
                                       value={boardTheme}
                                       onChange={setBoardTheme}
-                                      locked={!isPro}
+                                      locked={!isPremium}
                                       onLockedClick={() =>
                                         setShowPricingModal(true)
                                       }
@@ -3527,37 +3944,104 @@ export default function DashboardClient({
                             })()}
                           </div>
 
-                          <div className="bg-surface px-3 py-3 sm:px-4 sm:py-4">
-                            <ChessBoard
-                              key={`board-${activeGameId ?? "live"}`}
-                              fen={getBoardFen()}
-                              orientation={boardOrientation}
-                              lastMove={getLastMove()}
-                              checkSquare={getCheckHighlight()?.square}
-                              checkType={getCheckHighlight()?.type}
-                              interactive
-                              onMove={handleBoardMove}
-                              boardTheme={isPro ? boardTheme : "slate"}
-                              showColorPicker={false}
-                              maxWidth="100%"
-                            />
-                            {/* <p className="mt-2.5 text-center text-[12px] text-muted-2">
-                              Drag pieces to update notation
-                            </p> */}
+                          <div className="flex flex-col bg-surface px-3 py-3 sm:px-4 sm:py-4 lg:min-h-0 lg:flex-1">
+                            <div className="mb-2.5 flex shrink-0 items-center justify-center gap-2">
+                              <p
+                                className="min-w-0 truncate text-center text-[13px] font-semibold text-ink sm:text-[14px]"
+                                title={boardBottomPlayer}
+                              >
+                                {boardBottomPlayer}
+                              </p>
+                              <span className="shrink-0 text-[11px] font-medium text-muted-2">
+                                vs
+                              </span>
+                              <p
+                                className="min-w-0 truncate text-center text-[13px] font-semibold text-ink sm:text-[14px]"
+                                title={boardTopPlayer}
+                              >
+                                {boardTopPlayer}
+                              </p>
+                              {canEditGameMeta ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowGameMetaEdit(true)}
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-paper text-muted transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-ink cursor-pointer"
+                                  aria-label="Edit players and title"
+                                  title="Edit game details"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="gp-board-fit-host">
+                              <ChessBoard
+                                key={`board-${activeGameId ?? "live"}`}
+                                fen={getBoardFen()}
+                                orientation={boardOrientation}
+                                lastMove={getLastMove()}
+                                checkSquare={getCheckHighlight()?.square}
+                                checkType={getCheckHighlight()?.type}
+                                interactive
+                                onMove={handleBoardMove}
+                                boardTheme={isPremium ? boardTheme : "slate"}
+                                showColorPicker={false}
+                                maxWidth="100%"
+                                className="mx-auto"
+                              />
+                              {turns.length > 0 ? (
+                                <div className="lg:hidden">
+                                  <ReplayControls
+                                    {...replayPlayback}
+                                    currentPlyIndex={currentPlyIndex}
+                                    totalPlies={totalReplayPlies}
+                                    variant="overlay"
+                                  />
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
+                        </div>
+
+                        {!gameIsValid ? (
+                          <div className="flex shrink-0 items-start gap-3 overflow-hidden rounded-[14px] border border-amber-200 bg-warn-bg px-4 py-3 text-[12.5px]">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+                            <div className="space-y-1">
+                              <span className="block font-semibold text-ink">
+                                Almost there
+                              </span>
+                              <span className="block leading-relaxed text-muted">
+                                Fix the flagged moves (shown in{" "}
+                                <span className="font-medium text-warn">amber</span>
+                                ). Tip: right-click any move for instant
+                                suggestions — fixing the first one often clears
+                                the rest.
+                              </span>
+                            </div>
+                          </div>
+                        ) : null}
+
+        <div className="hidden min-h-[9.5rem] shrink-0 overflow-hidden lg:block lg:h-[9.5rem]">
+                          <ExportPanel
+                            section="pgn"
+                            pgn={pgn}
+                            gameIsValid={gameIsValid}
+                            isPaid={!!isPremium}
+                            gameId={activeGameId}
+                            isDraftGame={activeGameIsDraft}
+                            initialSharedSlug={activeGameSharedSlug}
+                            hasUnsavedChanges={gameHasUnsavedChanges}
+                            saveMeta={persistedGameMeta}
+                            onSave={handleSaveGame}
+                            onShare={handleShareGame}
+                            fillHeight
+                            compact
+                          />
                         </div>
                       </div>
 
-                      {/* Move sheet — directly under board on mobile; right column on lg */}
-                      <div className="order-2 flex min-w-0 flex-col gap-2 lg:col-start-2 lg:row-start-1 lg:row-span-3">
-                        <div
-                          className="flex h-[min(420px,45vh)] min-h-0 flex-col overflow-hidden lg:h-auto lg:min-h-[280px]"
-                          style={
-                            boardCardHeight != null && boardCardHeight > 0
-                              ? { height: boardCardHeight }
-                              : undefined
-                          }
-                        >
+                      {/* Move sheet — directly under board on mobile; full-height column on lg */}
+                      <div className="order-2 flex min-w-0 flex-col gap-2 lg:min-h-0 lg:overflow-hidden">
+                        <div className="flex h-[min(420px,50vh)] min-h-[280px] flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1 lg:max-h-none">
                           <MoveList
                             key={`moves-${activeGameId ?? "live"}`}
                             turns={turns}
@@ -3570,50 +4054,20 @@ export default function DashboardClient({
                             onLoadText={handleLoadText}
                             pendingEditPly={pendingEditPly}
                             onConsumePendingEdit={() => setPendingEditPly(null)}
+                            playback={replayPlayback}
+                            playbackBarClassName="hidden lg:block"
                           />
                         </div>
 
-                        {pgn && (
-                          <button
-                            type="button"
-                            onClick={() => setShowFeedbackModal(true)}
-                            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-line bg-surface py-2.5 text-[12px] font-medium text-muted transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-ink cursor-pointer"
-                          >
-                            <MessageSquare className="h-3.5 w-3.5" />
-                            Send feedback
-                          </button>
-                        )}
-                      </div>
-
-                      {!gameIsValid && (
-                        <div className="order-3 flex shrink-0 items-start gap-3 rounded-[14px] border border-amber-200 bg-warn-bg px-4 py-3 text-[12.5px] lg:col-start-1 lg:row-start-2">
-                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-                          <div className="space-y-1">
-                            <span className="block font-semibold text-ink">
-                              Almost there
-                            </span>
-                            <span className="block leading-relaxed text-muted">
-                              Fix the flagged moves (shown in{" "}
-                              <span className="font-medium text-warn">amber</span>
-                              ). Tip: right-click any move for instant
-                              suggestions — fixing the first one often clears
-                              the rest.
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="order-4 hidden min-w-0 lg:col-start-1 lg:row-start-3 lg:block">
-                        <ExportPanel
-                          section="pgn"
-                          pgn={pgn}
-                          gameIsValid={gameIsValid}
-                          isPaid={!!isPro}
-                          gameId={activeGameId}
-                          initialSharedSlug={activeGameSharedSlug}
-                          onSave={handleSaveGame}
-                          onShare={handleShareGame}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowFeedbackModal(true)}
+                          disabled={!pgn}
+                          className="flex h-[2.625rem] w-full shrink-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface text-[12px] font-medium text-muted transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-ink disabled:pointer-events-none disabled:opacity-40 cursor-pointer"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          Send feedback
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -3621,160 +4075,86 @@ export default function DashboardClient({
               </>
             )}
           </section>
+          <div className="mt-8 shrink-0 pb-2 lg:hidden">{dashboardFooter}</div>
         </main>
       ) : (
-        /* Account Settings View */
-        <main
-          className={`flex-1 ${ACCOUNT_SHELL} px-4 sm:px-6 md:px-8 py-4 sm:py-6 flex flex-col gap-4 min-h-0 gp-fade-in`}
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <button
-                onClick={() => setActiveTab("dashboard")}
-                className="inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted transition-colors hover:text-ink cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4" /> Back to dashboard
-              </button>
-              <h1 className="mt-2 text-[clamp(1.375rem,3vw,1.75rem)] font-bold tracking-[-0.02em] text-ink">
-                Account
-              </h1>
-              <p className="mt-0.5 text-[13px] text-muted">
-                Profile, security, and billing in one place.
-              </p>
-            </div>
+        <>
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain">
+            <AccountScreen
+              user={user}
+              onUserUpdate={(patch) => setUser((prev) => ({ ...prev, ...patch }))}
+              scanUsage={scanUsage}
+              isPro={isPro}
+              isEnterprise={isEnterpriseDisplay}
+              hasOrganizerWallet={hasOrganizerWalletAccess}
+              onBack={goToDashboard}
+              onUpgrade={() => setShowPricingModal(true)}
+              initialTab={accountTab}
+              billingPanel={renderAccountBillingPanel()}
+            />
           </div>
-
-          {!isPro ? (
-            <div className="grid gap-4 min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-6">
-              <div className="flex flex-col gap-4 min-w-0 min-h-0">
-                {renderAccountIdentityCard()}
-
-                {renderAccountProfileSection()}
-
-                <section
-                  className={`${PREMIUM_PANEL} gp-fade-up shrink-0`}
-                  style={{ animationDelay: "105ms" }}
-                >
-                  <div className={PREMIUM_PANEL_HEAD}>
-                    <CreditCard className="w-4 h-4 text-muted" />
-                    <h2 className="font-semibold text-ink text-[14px] tracking-tight">
-                      Your plan
-                    </h2>
-                  </div>
-                  <div className="p-4 sm:px-5 sm:py-3">
-                    <dl className="grid grid-cols-3 gap-3 text-[12px]">
-                      <div>
-                        <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
-                          Plan
-                        </dt>
-                        <dd className="font-semibold text-ink mt-0.5">Free</dd>
-                      </div>
-                      <div>
-                        <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
-                          Scans
-                        </dt>
-                        <dd className="font-semibold text-ink gp-nums mt-0.5">
-                          {scanUsage.used}/{scanUsage.limit}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-[10px] text-muted font-bold uppercase tracking-wider">
-                          Library
-                        </dt>
-                        <dd className="font-semibold text-muted flex items-center gap-1 mt-0.5">
-                          <Lock className="w-3 h-3" />
-                          Pro
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                </section>
-
-                {renderAccountBillingSection()}
-              </div>
-
-              <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start shrink-0">
-                {renderScanUsageMeter({ compact: true })}
-                <section className={`${PREMIUM_PANEL} p-4 gp-fade-up`}>
-                  <div className="space-y-2.5">
-                    <h2 className="font-semibold text-[14px] tracking-tight text-ink">
-                      Unlock Pro
-                    </h2>
-                    <p className="text-[11px] text-muted leading-relaxed">
-                      ₹100/mo · 100 scans or ₹1,000/yr · 1,000 scans, plus saved library and shareable replays.
-                    </p>
-                    <button
-                      onClick={() => setShowPricingModal(true)}
-                      className="w-full py-2 px-4 bg-ink hover:bg-ink-soft text-paper font-bold rounded-xl text-[12px] transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      View plans
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </section>
-                <FreeVsProTable
-                  compact
-                  onUpgrade={() => setShowPricingModal(true)}
-                />
-              </aside>
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-4 xl:gap-5">
-              {renderAccountIdentityCard()}
-
-              <div className="grid min-h-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)] xl:gap-6">
-                <div className="flex min-w-0 flex-col gap-4">
-                  {renderAccountProfileSection()}
-                </div>
-                <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-20">
-                  {renderAccountProBillingBlock()}
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
+          {dashboardFooter}
+        </>
       )}
 
-      {/* ── Footer ── */}
-      <footer className="border-t border-line bg-surface/25">
-          <div
-            className={`${DASHBOARD_SHELL} flex flex-col gap-4 px-4 py-6 sm:px-6 md:px-8`}
-          >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <LegalTrustLinks className="max-w-md" />
-              <nav
-                className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] sm:justify-end"
-                aria-label="Legal and support"
-              >
-                <LegalLink href="/privacy">Privacy Policy</LegalLink>
-                <LegalLink href="/refund">Refund Policy</LegalLink>
-                <a href={`mailto:${LEGAL.contactEmail}`} className="legal-link">
-                  {LEGAL.contactEmail}
-                </a>
-              </nav>
-            </div>
-            <div className="flex flex-col items-center justify-between gap-2 border-t border-line/50 pt-4 text-center sm:flex-row sm:text-left">
-              <span className="text-[12px] text-muted">
-                © {new Date().getFullYear()} GetPGN · Chess scoresheet digitizer
-              </span>
-              <span className="text-[12px] text-muted">
-                Built for players &amp; coaches
-              </span>
-            </div>
-          </div>
-        </footer>
+      {!isAccountView ? (
+        <div className="hidden shrink-0 lg:block">{dashboardFooter}</div>
+      ) : null}
+
+      <GameMetadataEditDialog
+        open={showGameMetaEdit}
+        initial={editGameMetaInitial}
+        saving={savingGameMeta}
+        onSave={(values) => void handleSaveGameMeta(values)}
+        onClose={() => {
+          if (!savingGameMeta) setShowGameMetaEdit(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={showDiscardUnsavedConfirm}
+        title="Discard unsaved changes?"
+        description={
+          activeGameIsDraft
+            ? "This scan isn't in your library yet. Save to keep it and the share link, or discard to remove the temporary link."
+            : "You edited this game after it was saved. Save your changes to the library, or discard them and leave."
+        }
+        confirmLabel="Discard"
+        cancelLabel={false}
+        alternateLabel="Save"
+        alternateLoading={savingBeforeLeave}
+        destructive
+        onAlternate={() => void handleSaveAndLeave()}
+        onConfirm={() => void handleDiscardAndLeave()}
+        onCancel={() => {
+          if (savingBeforeLeave) return;
+          pendingAfterDiscardRef.current = null;
+          setShowDiscardUnsavedConfirm(false);
+        }}
+      />
 
       <PricingModal
         open={showPricingModal}
         onClose={() => setShowPricingModal(false)}
         scanCount={scanUsage.used}
+        scanLimit={scanUsage.limit}
         isPro={!!isPro}
         billingLoading={billingLoading}
         initialInterval={pricingInitialInterval}
         mandateNotice={deferredMandateNotice}
         onSelectMonthly={() => handleCreateSubscription("monthly")}
         onSelectYearly={() => handleCreateSubscription("yearly")}
+        onSelectEnterprise={() => {
+          setShowPricingModal(false);
+          router.push("/organizer");
+        }}
       />
+
+      {loadingSavedGame ? (
+        <SavedGameLoadingOverlay title={loadingSavedGame.title} />
+      ) : null}
+
+      {isLeavingWorkspace ? <WorkspaceLeavingOverlay /> : null}
 
       {appState === "extracting" && (
         <ExtractingOverlay
@@ -3801,20 +4181,6 @@ export default function DashboardClient({
         open={showFeedbackModal}
         onClose={() => setShowFeedbackModal(false)}
         onSubmit={handleSubmitFeedback}
-      />
-
-      <ConfirmDialog
-        open={!!pendingDelete}
-        title="Delete this game?"
-        description="This permanently removes the saved game and its share link. This can't be undone."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        destructive
-        loading={deleting}
-        onConfirm={handleDeleteGame}
-        onCancel={() => {
-          if (!deleting) setPendingDelete(null);
-        }}
       />
 
       {/* <ConfirmDialog

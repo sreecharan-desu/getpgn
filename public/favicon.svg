@@ -1,17 +1,62 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#171717" />
-      <stop offset="100%" stop-color="#0A0A0A" />
+      <stop offset="0%" stop-color="#FAFAFA" />
+      <stop offset="100%" stop-color="#ECECEF" />
+    </linearGradient>
+    <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+      <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#0A0A0A" stroke-opacity="0.04" stroke-width="0.5" />
+    </pattern>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#525257" />
+      <stop offset="34%" stop-color="#262629" />
+      <stop offset="100%" stop-color="#060607" />
+    </linearGradient>
+    <radialGradient id="spec" cx="36%" cy="24%" r="58%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55" />
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="rim" cx="84%" cy="62%" r="44%">
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="100%" stop-color="#cfd2da" stop-opacity="0.4" />
+    </radialGradient>
+    <linearGradient id="crown" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3c3c40" />
+      <stop offset="100%" stop-color="#050506" />
+    </linearGradient>
+    <radialGradient id="bead" cx="34%" cy="30%" r="72%">
+      <stop offset="0%" stop-color="#8a8a90" />
+      <stop offset="42%" stop-color="#2a2a2d" />
+      <stop offset="100%" stop-color="#050506" />
+    </radialGradient>
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a3a3e" />
+      <stop offset="100%" stop-color="#070708" />
     </linearGradient>
   </defs>
-  <rect width="100" height="100" rx="23" fill="url(#tile)" />
-  <g fill="#FAFAFA" transform="translate(14 11.5) scale(0.72)">
-    <path d="M17 50V35.5C17 31.2 20.8 28 25.2 29.2L32 21.5C34.1 19.6 37 19.6 39.1 21.5L45.5 29.5L50 11L54.5 29.5L60.9 21.5C63 19.6 65.9 19.6 68 21.5L74.8 29.2C79.2 28 83 31.2 83 35.5V50H17Z" />
-    <circle cx="50" cy="14.5" r="3.5" />
-    <path d="M21 50H79V57H21V50Z" />
-    <path d="M26 57.5C27.8 67.5 26.2 75.8 22.5 79.5H77.5C73.8 75.8 72.2 67.5 74 57.5H26Z" />
-    <path d="M19 79.5H81V85C81 86.4 79.9 87.5 78.5 87.5H21.5C20.1 87.5 19 86.4 19 85V79.5Z" />
-    <path d="M14 87.5H86V92.5C86 94.9 84.2 96.5 82 96.5H18C15.8 96.5 14 94.9 14 92.5V87.5Z" />
+  <rect width="100" height="100" rx="22" fill="url(#tile)" />
+  <rect width="100" height="100" rx="22" fill="url(#grid)" />
+  <g transform="translate(50 54) scale(0.24) translate(-120 -150)">
+    <ellipse cx="120" cy="270" rx="64" ry="14" fill="url(#base)" />
+    <rect x="60" y="246" width="120" height="20" rx="10" fill="url(#base)" />
+    <rect x="72" y="236" width="96" height="14" rx="7" fill="url(#crown)" />
+    <path d="M80 100 C70 128 58 156 56 192 C54 230 84 250 120 250 C156 250 186 230 184 192 C182 156 170 128 160 100 Z" fill="url(#body)" />
+    <path d="M80 100 C70 128 58 156 56 192 C54 230 84 250 120 250 C156 250 186 230 184 192 C182 156 170 128 160 100 Z" fill="url(#rim)" />
+    <path d="M80 100 C70 128 58 156 56 192 C54 230 84 250 120 250 C156 250 186 230 184 192 C182 156 170 128 160 100 Z" fill="url(#spec)" />
+    <path d="M96 110 C90 150 88 196 94 236 C98 238 104 238 108 235 C103 196 104 150 110 112 C105 109 100 109 96 110 Z" fill="#ffffff" opacity="0.16" />
+    <rect x="74" y="86" width="92" height="16" rx="8" fill="url(#crown)" />
+    <rect x="74" y="86" width="92" height="6" rx="3" fill="#ffffff" opacity="0.14" />
+    <path d="M70 88 L76 54 L94 70 L100 42 L113 70 L120 36 L127 70 L140 42 L146 70 L164 54 L170 88 Z" fill="url(#crown)" />
+    <circle cx="76" cy="52" r="7.5" fill="url(#bead)" />
+    <circle cx="73.6" cy="49.3" r="1.95" fill="#ffffff" opacity="0.7" />
+    <circle cx="100" cy="40" r="7.5" fill="url(#bead)" />
+    <circle cx="97.6" cy="37.3" r="1.95" fill="#ffffff" opacity="0.7" />
+    <circle cx="120" cy="33" r="9" fill="url(#bead)" />
+    <circle cx="117.1" cy="29.8" r="2.34" fill="#ffffff" opacity="0.7" />
+    <circle cx="140" cy="40" r="7.5" fill="url(#bead)" />
+    <circle cx="137.6" cy="37.3" r="1.95" fill="#ffffff" opacity="0.7" />
+    <circle cx="164" cy="52" r="7.5" fill="url(#bead)" />
+    <circle cx="161.6" cy="49.3" r="1.95" fill="#ffffff" opacity="0.7" />
   </g>
 </svg>

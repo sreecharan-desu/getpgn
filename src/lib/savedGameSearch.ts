@@ -1,6 +1,8 @@
 export interface SearchableSavedGame {
   id: string;
   title: string;
+  whitePlayer?: string;
+  blackPlayer?: string;
   movesJson?: string;
   createdAt: string;
   publicLink?: { slug: string; enabled: boolean } | null;
@@ -35,6 +37,8 @@ export function filterSavedGames<T extends SearchableSavedGame>(
 
   return games.filter((game) => {
     if (game.title.toLowerCase().includes(q)) return true;
+    if (game.whitePlayer?.toLowerCase().includes(q)) return true;
+    if (game.blackPlayer?.toLowerCase().includes(q)) return true;
     if (game.id.toLowerCase().includes(q)) return true;
     if (formatSearchDate(game.createdAt).includes(q)) return true;
     if (

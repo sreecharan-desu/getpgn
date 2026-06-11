@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
 import { isProUser } from '@/lib/proAccess';
+import { getSubscriptionBillingLabel, getSubscriptionAmount } from '@/lib/billingDisplay';
 import { buildInvoicePdf } from '@/lib/invoicePdf';
 
 function toInvoiceDate(value: Date | string | null | undefined): Date {
@@ -21,9 +22,10 @@ export async function GET() {
     }
 
     const isSimulated = user.paymentProvider === 'simulated';
-    const isYearly = user.subscriptionPlan === 'yearly';
-    const cycle = isYearly ? 'Yearly' : 'Monthly';
-    const amount = isSimulated ? 'Rs 0 (dev)' : isYearly ? 'Rs 1,000' : 'Rs 100';
+    const amountInr = getSubscriptionAmount(user.subscriptionPlan, user.plan, isSimulated);
+    const amount = isSimulated
+      ? 'Rs 0 (dev)'
+      : amountInr.replace('₹', 'Rs ');
 
     let payment: { razorpayPaymentId: string; createdAt: Date } | null = null;
     try {
@@ -58,9 +60,9 @@ export async function GET() {
       issuedAt,
       username: user.username,
       email: user.email,
-      planLabel: isSimulated
-        ? 'GetPGN Pro - Dev simulation'
-        : `GetPGN Pro - ${cycle} subscription`,
+      planLabel: getSubscriptionBillingLabel(user.subscriptionPlan, user.plan, {
+        simulated: isSimulated,
+      }).replace(' — ', ' - '),
       amount,
       status,
       subscriptionId: user.subscriptionId,

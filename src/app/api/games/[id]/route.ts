@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
-import { isProUser } from '@/lib/proAccess';
+import { requirePaidLibraryAccess } from '@/lib/requirePaidLibrary';
 import { savedGameDetailSelect } from '@/lib/dbSelects';
+import { injectPlayerNamesIntoPgn, validatePlayerNames } from '@/lib/playerNames';
 import { createValidationSessionToken } from '@/lib/validationSession';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -13,9 +14,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     if (!auth.ok) return auth.response;
     const user = auth.user;
 
-    if (!isProUser(user)) {
-      return NextResponse.json({ error: 'History logging is only accessible on active Paid plans.' }, { status: 403 });
-    }
+    const library = await requirePaidLibraryAccess(user);
+    if (!library.ok) return library.response;
 
     const { id } = await context.params;
 
@@ -46,25 +46,24 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (!auth.ok) return auth.response;
     const user = auth.user;
 
-    if (!isProUser(user)) {
-      return NextResponse.json(
-        { error: 'History persistence is only available for Paid plans. Please upgrade.' },
-        { status: 403 },
-      );
-    }
+    const library = await requirePaidLibraryAccess(user);
+    if (!library.ok) return library.response;
 
     const { id } = await context.params;
     const body = await req.json();
     const pgn = typeof body.pgn === 'string' ? body.pgn : undefined;
     const title = typeof body.title === 'string' ? body.title.trim() : undefined;
+    const hasWhite = typeof body.whitePlayer === 'string';
+    const hasBlack = typeof body.blackPlayer === 'string';
     const movesJson =
       body.movesJson == null
         ? undefined
         : typeof body.movesJson === 'string'
           ? body.movesJson
           : JSON.stringify(body.movesJson);
+    const confirmSave = body.confirmSave === true;
 
-    if (!pgn && !movesJson && !title) {
+    if (!pgn && !movesJson && !title && !hasWhite && !hasBlack && !confirmSave) {
       return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
     }
 
@@ -72,7 +71,36 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Title too long (max 200 characters).' }, { status: 400 });
     }
 
-    if (pgn !== undefined && pgn.length > 100_000) {
+    const existing = await prisma.savedGame.findFirst({
+      where: { id, userId: user.id },
+      select: { pgn: true, whitePlayer: true, blackPlayer: true, isDraft: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Game not found.' }, { status: 404 });
+    }
+
+    let whitePlayer = existing.whitePlayer;
+    let blackPlayer = existing.blackPlayer;
+    if (hasWhite || hasBlack) {
+      const names = validatePlayerNames(
+        hasWhite ? body.whitePlayer : whitePlayer,
+        hasBlack ? body.blackPlayer : blackPlayer,
+      );
+      if (!names.ok) {
+        return NextResponse.json({ error: names.error }, { status: 400 });
+      }
+      whitePlayer = names.whitePlayer;
+      blackPlayer = names.blackPlayer;
+    }
+
+    const basePgn = pgn ?? existing.pgn;
+    const pgnOut =
+      hasWhite || hasBlack
+        ? injectPlayerNamesIntoPgn(basePgn, whitePlayer, blackPlayer)
+        : pgn;
+
+    if (pgnOut !== undefined && pgnOut.length > 100_000) {
       return NextResponse.json({ error: 'PGN too large.' }, { status: 413 });
     }
 
@@ -83,9 +111,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const updated = await prisma.savedGame.updateMany({
       where: { id, userId: user.id },
       data: {
-        ...(pgn !== undefined ? { pgn } : {}),
+        ...(pgnOut !== undefined ? { pgn: pgnOut } : {}),
         ...(movesJson !== undefined ? { movesJson } : {}),
         ...(title ? { title } : {}),
+        ...(hasWhite || hasBlack ? { whitePlayer, blackPlayer } : {}),
+        ...(confirmSave ? { isDraft: false } : {}),
       },
     });
 

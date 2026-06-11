@@ -16,14 +16,13 @@ import {
   Sparkles,
   Infinity as InfinityIcon,
   Lock,
-  RotateCcw,
   LayoutGrid,
-  Heart,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import BoardThumbnail from "@/components/ui/BoardThumbnail";
 import { FREE_SCAN_LIMIT } from "@/components/dashboard/FreePlanUI";
 import { LandingNav } from "@/components/landing/LandingNav";
+import { HomeHero } from "@/components/landing/HomeHero";
+import { HomeVideoSection } from "@/components/landing/HomeVideoSection";
 import { PricingSectionContent } from "@/components/pricing/PricingSectionContent";
 
 const FREE_FEATURES = [
@@ -60,11 +59,11 @@ const FREE_FEATURES = [
 ] as const;
 
 const PRO_FEATURES = [
-  { icon: InfinityIcon, label: "₹100/mo · 100 scans or ₹1,000/yr · 1,000 scans" },
+  { icon: InfinityIcon, label: "Pro: ₹100/mo · 100 scans or ₹1,000/yr · 1,000 scans" },
   { icon: History, label: "Cloud library with board previews" },
   { icon: Share2, label: "Shareable interactive replays" },
   { icon: LayoutGrid, label: "5 board color themes" },
-  { icon: Sparkles, label: "Permanent game history" },
+  { icon: Sparkles, label: "Enterprise: pay-as-you-go packs from ₹4,000" },
 ] as const;
 
 const STEPS = [
@@ -72,58 +71,6 @@ const STEPS = [
   { n: "02", title: "Review", desc: "AI extracts moves; you validate and fix on the board.", icon: ShieldCheck },
   { n: "03", title: "Export", desc: "Copy or download PGN — save to your library on Pro.", icon: Download },
 ] as const;
-
-function ProductPreview() {
-  const rows = [
-    { moves: "1. e4 e5  2. Nf3 Nc6" },
-    { moves: "3. Bb5 a6  4. Ba4 Nf6" },
-    { moves: "5. O-O Be7  6. Re1 b5" },
-    { moves: "7. Bb3 d6  8. c3 O-O" },
-  ];
-
-  return (
-    <div className="relative">
-      <div
-        className="pointer-events-none absolute -inset-4 rounded-[32px] bg-[radial-gradient(80%_60%_at_50%_40%,var(--color-surface-2)_0%,transparent_70%)]"
-        aria-hidden="true"
-      />
-      <div className="relative overflow-hidden rounded-[24px] border border-line bg-paper shadow-[var(--shadow-pop)]">
-        <div className="flex items-center gap-2 border-b border-line bg-surface px-4 py-3">
-          <span className="h-2 w-2 rounded-full bg-faint" />
-          <span className="h-2 w-2 rounded-full bg-faint" />
-          <span className="h-2 w-2 rounded-full bg-faint" />
-          <span className="ml-auto font-mono text-[11px] text-muted-2">round-4.jpg → validated PGN</span>
-        </div>
-
-        <div className="grid gap-0 lg:grid-cols-[1fr_140px]">
-          <div className="space-y-2 border-b border-line p-5 lg:border-b-0 lg:border-r">
-            {rows.map((r) => (
-              <div
-                key={r.moves}
-                className="rounded-lg bg-surface px-3 py-2 font-mono text-[12px] leading-snug text-ink-soft"
-              >
-                {r.moves}
-              </div>
-            ))}
-            <div className="mt-4 rounded-xl bg-ink p-4">
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper/45">Generated PGN</p>
-              <code className="block font-mono text-[12px] leading-relaxed text-paper/90">
-                1. e4 e5 2. Nf3 Nc6 3. Bb5
-                <br />
-                a6 4. Ba4 Nf6 5. O-O Be7…
-              </code>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center justify-center gap-3 bg-surface p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-2">Board replay</p>
-            <BoardThumbnail size={112} aria-label="Sample position preview" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PricingSection() {
   return (
@@ -139,57 +86,8 @@ export default function GetPGNLandingPage() {
   return (
     <div className="min-h-screen bg-paper text-ink">
       <LandingNav />
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-line">
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-20%,var(--color-surface)_0%,var(--color-paper)_50%,transparent_100%)]"
-          aria-hidden="true"
-        />
-        <div className="relative mx-auto grid w-full max-w-6xl items-center gap-10 px-5 py-14 sm:px-8 sm:py-16 lg:grid-cols-2 lg:gap-12 lg:py-20">
-          <div className="gp-fade-up">
-            <div className="chip mb-6">
-              <span className="h-1.5 w-1.5 rounded-full bg-positive" />
-              Built for tournament chess
-            </div>
-            <h1 className="text-[clamp(2.25rem,5vw,3.75rem)] font-extrabold leading-[1.04] tracking-[-0.04em] text-ink">
-              Scoresheets to PGN,
-              <br />
-              <span className="text-muted-2">instantly.</span>
-            </h1>
-            <p className="mt-6 max-w-lg text-[16px] leading-relaxed text-muted">
-              Photograph a handwritten scoresheet and get a validated, export-ready PGN in seconds — AI
-              extraction, live board validation, and smart repair built in.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link href="/login" prefetch className="btn-primary btn-lg">
-                Start digitizing free
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <a href="#pricing" className="btn-secondary btn-lg">
-                See pricing
-              </a>
-            </div>
-            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-muted-2">
-              <span className="inline-flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-positive" strokeWidth={2.5} />
-                {FREE_SCAN_LIMIT} free scans
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-positive" strokeWidth={2.5} />
-                No credit card
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <RotateCcw className="h-3.5 w-3.5" />
-                Cancel Pro anytime
-              </span>
-            </div>
-          </div>
-
-          <div className="gp-fade-up [animation-delay:80ms]">
-            <ProductPreview />
-          </div>
-        </div>
-      </section>
+      <HomeHero />
+      <HomeVideoSection />
 
       {/* How it works */}
       <section id="how-it-works" className="border-b border-line bg-surface">
@@ -208,7 +106,7 @@ export default function GetPGNLandingPage() {
             {STEPS.map(({ n, title, desc, icon: Icon }, i) => (
               <li
                 key={n}
-                className="relative rounded-[20px] border border-line bg-paper p-6 shadow-[var(--shadow-soft)] gp-lift"
+                className="relative rounded-[20px] border border-line bg-paper p-6 gp-lift"
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <span className="mb-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-paper gp-nums">
@@ -233,8 +131,8 @@ export default function GetPGNLandingPage() {
                 Everything your scoresheet needs
               </h2>
               <p className="mt-3 text-[15px] leading-relaxed text-muted">
-                Powerful digitizing on the Free plan. Pro adds your permanent library, share links, and board
-                themes.
+                Try the full digitizing flow with 2 free scans. Pro adds your library and share links.
+                Enterprise customers can buy pay-as-you-go scan packs and publish a public game library.
               </p>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-[12px] text-muted">
@@ -268,8 +166,7 @@ export default function GetPGNLandingPage() {
                   Never lose a game again
                 </h3>
                 <p className="mt-2 text-[14px] leading-relaxed text-paper/65">
-                  ₹100/mo for 100 scans or ₹1,000/yr for 1,000 scans, plus cloud library, shareable replays, and five board color
-                  themes.
+                  Pro from ₹100/mo or ₹1,000/yr. Enterprise pay-as-you-go packs from ₹4,000 — add credits anytime.
                 </p>
               </div>
               <ul className="grid gap-2.5 sm:grid-cols-2 lg:gap-x-8">
@@ -329,6 +226,10 @@ export default function GetPGNLandingPage() {
               Privacy Policy
             </Link>
             {" · "}
+            <Link href="/terms" prefetch className="legal-link">
+              Terms
+            </Link>
+            {" · "}
             <Link href="/refund" prefetch className="legal-link">
               Refund Policy
             </Link>
@@ -356,6 +257,9 @@ export default function GetPGNLandingPage() {
             <Link href="/privacy" prefetch className="legal-link">
               Privacy
             </Link>
+            <Link href="/terms" prefetch className="legal-link">
+              Terms
+            </Link>
             <Link href="/refund" prefetch className="legal-link">
               Refunds
             </Link>
@@ -370,21 +274,8 @@ export default function GetPGNLandingPage() {
         </div>
         <div className="border-t border-line/40">
           <div className="mx-auto w-full max-w-6xl px-5 py-3 sm:px-8">
-            <p className="inline-flex w-full items-center justify-end gap-1 text-[11px] text-muted-2">
-              <span>Built with</span>
-              <Heart
-                className="h-3 w-3 animate-pulse fill-rose-500 text-rose-500"
-                aria-hidden="true"
-              />
-              <span>by</span>
-              <a
-                href="https://sreecharandesu.in"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-muted transition-colors hover:text-ink"
-              >
-                sreecharan
-              </a>
+            <p className="text-center text-[11px] text-muted-2 sm:text-right">
+              Built by Chess Coaches. Powered by ABCChess Education LLP.
             </p>
           </div>
         </div>

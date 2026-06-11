@@ -9,6 +9,11 @@ export const userSessionSelect = {
   scanCount: true,
   monthlyScanCount: true,
   monthlyScanMonth: true,
+  bonusScanCount: true,
+  referralCode: true,
+  avatarPiece: true,
+  userRole: true,
+  onboardingCompleted: true,
   subscriptionExpiresAt: true,
   subscriptionId: true,
   subscriptionPlan: true,
@@ -23,6 +28,7 @@ export const userSessionSelect = {
 export const userAuthSelect = {
   id: true,
   username: true,
+  email: true,
   passwordHash: true,
   plan: true,
   emailVerified: true,
@@ -31,7 +37,10 @@ export const userAuthSelect = {
 export const savedGameListSelect = {
   id: true,
   title: true,
+  whitePlayer: true,
+  blackPlayer: true,
   movesJson: true,
+  isDraft: true,
   createdAt: true,
   publicLink: {
     select: {
@@ -44,8 +53,11 @@ export const savedGameListSelect = {
 export const savedGameDetailSelect = {
   id: true,
   title: true,
+  whitePlayer: true,
+  blackPlayer: true,
   pgn: true,
   movesJson: true,
+  isDraft: true,
   createdAt: true,
   publicLink: {
     select: {

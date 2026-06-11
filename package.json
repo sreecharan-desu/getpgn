@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "prisma generate && next dev",
-    "db:sync": "prisma generate && prisma db push",
-    "build": "prisma generate && prisma db push --skip-generate && next build",
+    "dev": "node --env-file=.env scripts/check-setup.mjs && prisma generate && next dev",
+    "db:sync": "prisma generate && prisma db push && prisma generate",
+    "db:check": "node --env-file=.env scripts/check-setup.mjs",
+    "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
-    "setup:python": "node scripts/setup-python.js"
+    "setup:python": "node scripts/setup-python.js",
+    "benchmark:scoresheets": "tsx scripts/benchmark-scoresheets.mjs",
+    "benchmark:gemini": "tsx scripts/benchmark-gemini-extract.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",

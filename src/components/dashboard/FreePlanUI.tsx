@@ -85,7 +85,7 @@ export function ScanUsageMeter({
   const remaining = Math.max(0, limit - used);
   const exhausted = used >= limit;
   const pct = Math.min(100, limit > 0 ? (used / limit) * 100 : 0);
-  const isPro = tier === 'pro';
+  const isPro = tier === 'pro' || tier === 'organizer';
 
   return (
     <div

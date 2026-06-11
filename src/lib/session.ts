@@ -28,6 +28,11 @@ export type SessionUser = Pick<
   | 'scanCount'
   | 'monthlyScanCount'
   | 'monthlyScanMonth'
+  | 'bonusScanCount'
+  | 'referralCode'
+  | 'avatarPiece'
+  | 'userRole'
+  | 'onboardingCompleted'
   | 'subscriptionExpiresAt'
   | 'subscriptionId'
   | 'subscriptionPlan'
@@ -73,6 +78,25 @@ export async function destroySession() {
   cookieStore.delete(COOKIE_NAME);
 }
 
+type PostAuthUser = Pick<
+  SessionUser,
+  'emailVerified' | 'onboardingCompleted' | 'email'
+>;
+
+/** Post-login destination: email → verify → onboard → dashboard. */
+export function getPostAuthRedirectPath(user: PostAuthUser): string {
+  if (!user.email) {
+    return '/signup/email';
+  }
+  if (!user.emailVerified) {
+    return `/verify-email?email=${encodeURIComponent(user.email)}`;
+  }
+  if (!user.onboardingCompleted) {
+    return '/onboarding';
+  }
+  return '/dashboard';
+}
+
 /** Where to send a signed-in user (verify-email gate or dashboard). Null if logged out. */
 export async function getAuthenticatedRedirectPath(): Promise<string | null> {
   const session = await getSession();
@@ -81,16 +105,11 @@ export async function getAuthenticatedRedirectPath(): Promise<string | null> {
   const user = await getCurrentUser();
   if (!user) return '/auth/logout';
 
-  if (!user.emailVerified) {
-    const email = user.email ? `?email=${encodeURIComponent(user.email)}` : '';
-    return `/verify-email${email}`;
-  }
-
-  return '/dashboard';
+  return getPostAuthRedirectPath(user);
 }
 
 function applySubscriptionExpiry(user: SessionUser): SessionUser {
-  if (user.plan !== 'PAID') return user;
+  if (user.plan !== 'PAID' && user.plan !== 'ENTERPRISE') return user;
 
   const now = new Date();
   const expired =
@@ -148,10 +167,28 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
     return normalized;
   } catch (err) {
-    console.error('[Session Auth] Failed to load user for session:', err);
+    const code = (err as { code?: string })?.code;
+    if (code === 'P2022') {
+      console.error(
+        '[Session Auth] Database schema is out of sync (missing column). Run: npm run db:sync',
+      );
+    } else {
+      console.error('[Session Auth] Failed to load user for session:', err);
+    }
     return null;
   }
 });
+
+/** True when a session cookie exists but the user row could not be loaded. */
+export async function hasBrokenSession(): Promise<boolean> {
+  const session = await getSession();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true },
+  });
+  return !user;
+}
 
 /** Authenticated user with a verified email — use for protected app routes. */
 export async function getVerifiedUser(): Promise<SessionUser | null> {

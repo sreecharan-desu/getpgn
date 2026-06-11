@@ -1,72 +1,42 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useActionState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { User, Lock, Mail } from "lucide-react";
+import { User } from "lucide-react";
 import { AuthSplitLayout } from "@/components/ui/AuthSplitLayout";
-import { IconInput } from "@/components/ui/IconInput";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Feedback } from "@/components/ui/Feedback";
 import { Spinner } from "@/components/ui/Spinner";
-import { friendlyError, readApiError } from "@/lib/friendlyError";
+import { loginAction, type LoginFormState } from "./actions";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [loginId, setLoginId] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [redirecting, setRedirecting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const busy = loading || redirecting || success;
+interface LoginClientProps {
+  schemaError?: boolean;
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+function SubmitButton({ pending }: { pending: boolean }) {
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending || undefined}
+      className="btn-primary btn-md w-full"
+    >
+      {pending ? (
+        <>
+          <Spinner size={15} /> Signing in…
+        </>
+      ) : (
+        "Sign in"
+      )}
+    </button>
+  );
+}
 
-    if (!loginId || !password) {
-      setError("Please enter your username or email and password.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: loginId.trim(), password }),
-      });
-
-      if (!res.ok) {
-        throw new Error(
-          await readApiError(res, "We couldn't sign you in. Please try again."),
-        );
-      }
-
-      const data = (await res.json()) as {
-        needsVerification?: boolean;
-        email?: string;
-      };
-
-      if (data.needsVerification) {
-        setRedirecting(true);
-        router.replace(
-          `/verify-email?email=${encodeURIComponent(data.email ?? "")}`,
-        );
-        router.refresh();
-        return;
-      }
-
-      setSuccess(true);
-      setRedirecting(true);
-      router.replace('/dashboard');
-      router.refresh();
-    } catch (err: unknown) {
-      setError(friendlyError(err, "We couldn't sign you in. Please try again."));
-      setLoading(false);
-    }
-  };
+export default function LoginClient({ schemaError = false }: LoginClientProps) {
+  const [state, formAction, pending] = useActionState<LoginFormState, FormData>(
+    loginAction,
+    {},
+  );
 
   return (
     <AuthSplitLayout
@@ -83,39 +53,44 @@ export default function LoginPage() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {error && <Feedback variant="error">{error}</Feedback>}
-        {success && (
-          <Feedback variant="success">Signed in successfully. Redirecting…</Feedback>
+      <form action={formAction} className="space-y-4" noValidate>
+        {schemaError && (
+          <Feedback variant="error">
+            Your database schema is out of sync with the app. In the project folder run{" "}
+            <code className="font-mono text-[12px]">npm run db:sync</code> then restart the dev server.
+            Existing data is preserved — only new columns/tables are added.
+          </Feedback>
         )}
-        {redirecting && !success && (
-          <Feedback variant="success">Taking you to email verification…</Feedback>
-        )}
+        {state?.error ? <Feedback variant="error">{state.error}</Feedback> : null}
 
-        <IconInput
-          id="loginId"
-          label="Username or email"
-          icon={
-            loginId.includes("@") ? (
-              <Mail className="h-4 w-4" />
-            ) : (
+        <div>
+          <label htmlFor="loginId" className="field-label">
+            Username or email
+          </label>
+          <div className="relative">
+            <span
+              className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted-2"
+              aria-hidden="true"
+            >
               <User className="h-4 w-4" />
-            )
-          }
-          type="text"
-          autoComplete="username"
-          required
-          value={loginId}
-          onChange={(e) => setLoginId(e.target.value)}
-          disabled={busy}
-          placeholder="your-username or you@email.com"
-        />
+            </span>
+            <input
+              id="loginId"
+              name="loginId"
+              type="text"
+              className="input"
+              style={{ paddingLeft: "2.375rem" }}
+              autoComplete="username"
+              required
+              disabled={pending}
+              placeholder="your-username or you@email.com"
+            />
+          </div>
+        </div>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label htmlFor="password" className="field-label mb-0">
-              Password
-            </label>
+            <span className="field-label mb-0">Password</span>
             <Link
               href="/auth/forgot-password"
               className="text-[12px] text-muted transition-colors hover:text-ink"
@@ -123,38 +98,10 @@ export default function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          <IconInput
-            id="password"
-            label=""
-            icon={<Lock className="h-4 w-4" />}
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={busy}
-            placeholder="••••••••"
-          />
+          <PasswordInput label="" disabled={pending} />
         </div>
 
-        <button
-          type="submit"
-          disabled={busy}
-          aria-busy={busy || undefined}
-          className="btn-primary btn-md w-full"
-        >
-          {redirecting ? (
-            <>
-              <Spinner size={15} /> Redirecting…
-            </>
-          ) : loading ? (
-            <>
-              <Spinner size={15} /> Signing in…
-            </>
-          ) : (
-            "Sign in"
-          )}
-        </button>
+        <SubmitButton pending={pending} />
       </form>
     </AuthSplitLayout>
   );

@@ -1,8 +1,9 @@
 export const LEGAL = {
   siteName: "GetPGN",
   siteUrl: "https://getpgn.in",
-  contactEmail: "support@getpgn.in",
-  privacyEmail: "privacy@getpgn.in",
-  lastUpdated: "June 8, 2026",
+  contactEmail: "getpgn@gmail.com",
+  enterpriseContactEmail: "getpgn@gmail.com",
+  privacyEmail: "getpgn@gmail.com",
+  lastUpdated: "June 9, 2026",
   entityName: "GetPGN",
 } as const;

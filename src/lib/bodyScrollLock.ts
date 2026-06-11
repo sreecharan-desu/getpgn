@@ -20,3 +20,12 @@ export function unlockBodyScroll(): void {
     savedOverflow = "";
   }
 }
+
+/** Clears a stuck scroll lock (e.g. after route changes). */
+export function resetBodyScroll(): void {
+  if (typeof document === "undefined") return;
+  lockCount = 0;
+  savedOverflow = "";
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
+}

@@ -26,8 +26,7 @@ const audiowide = Audiowide({
   display: "swap",
 });
 
-const siteDescription =
-  "Turn handwritten chess scoresheets into validated PGN files. AI extraction, live move validation, smart repair, and cloud storage — built for tournament players and coaches.";
+import { SITE_DESCRIPTION } from "@/lib/og/constants";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://getpgn.in"),
@@ -35,25 +34,25 @@ export const metadata: Metadata = {
     default: "GetPGN — Scoresheets to PGN, instantly",
     template: "%s · GetPGN",
   },
-  description: siteDescription,
+  description: SITE_DESCRIPTION,
   applicationName: "GetPGN",
   icons: {
-    icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
-    apple: "/apple-touch-icon.png",
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
   },
   openGraph: {
     title: "GetPGN — Scoresheets to PGN, instantly",
-    description: siteDescription,
+    description: SITE_DESCRIPTION,
     siteName: "GetPGN",
     type: "website",
+    url: "https://getpgn.in",
+    locale: "en_IN",
   },
   twitter: {
     card: "summary_large_image",
     title: "GetPGN — Scoresheets to PGN, instantly",
-    description: siteDescription,
+    description: SITE_DESCRIPTION,
   },
 };
 
@@ -78,15 +77,16 @@ export default function RootLayout({
       >
         {children}
         <Toaster
-          position="top-right"
-          gap={10}
+          position="top-center"
+          richColors={false}
           toastOptions={{
+            className: "gp-toast",
             style: {
               borderRadius: "12px",
               border: "1px solid var(--color-line-strong)",
               background: "var(--color-paper)",
               color: "var(--color-ink)",
-              boxShadow: "var(--shadow-pop)",
+              boxShadow: "var(--shadow-soft)",
               fontSize: "13px",
               fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
             },

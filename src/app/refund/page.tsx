@@ -2,22 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicyShell } from "@/components/legal/PolicyShell";
 import { LEGAL } from "@/lib/legal";
+import { refundMetadata } from "@/lib/og/pages";
+import { PRICING_DISPLAY, formatInr } from "@/lib/pricingDisplay";
+import {
+  ORGANIZER_MIN_SCANS,
+  calculateOrganizerAmount,
+  formatOrganizerInr,
+} from "@/lib/organizerPricing";
 
-export const metadata: Metadata = {
-  title: "Refund & Cancellation Policy",
-  description:
-    "GetPGN Pro subscription refund and cancellation terms. Clear, fair policies for monthly and yearly plans processed via Razorpay.",
-  alternates: { canonical: `${LEGAL.siteUrl}/refund` },
-  openGraph: {
-    title: "Refund & Cancellation Policy · GetPGN",
-    description:
-      "Refund and cancellation terms for GetPGN Pro subscriptions.",
-    url: `${LEGAL.siteUrl}/refund`,
-    siteName: LEGAL.siteName,
-    type: "website",
-  },
-  robots: { index: true, follow: true },
-};
+export const metadata: Metadata = refundMetadata();
+
+const { monthly, yearly } = PRICING_DISPLAY;
 
 function Section({
   title,
@@ -44,7 +39,7 @@ export default function RefundPolicyPage() {
     description: metadata.description,
     url: `${LEGAL.siteUrl}/refund`,
     isPartOf: { "@type": "WebSite", name: LEGAL.siteName, url: LEGAL.siteUrl },
-    dateModified: "2026-06-08",
+    dateModified: "2026-06-09",
     publisher: { "@type": "Organization", name: LEGAL.entityName, url: LEGAL.siteUrl },
   };
 
@@ -56,25 +51,41 @@ export default function RefundPolicyPage() {
       />
       <PolicyShell
         title="Refund & Cancellation Policy"
-        description={`Last updated ${LEGAL.lastUpdated}. Fair and transparent terms for GetPGN Pro subscriptions, processed securely via Razorpay.`}
+        description={`Last updated ${LEGAL.lastUpdated}. Fair and transparent billing for Free, Pro, and Enterprise pay-as-you-go plans — processed securely via Razorpay.`}
       >
         <Section title="Overview">
           <p>
-            {LEGAL.siteName} offers a free plan with limited scans and a paid
-            Pro plan with unlimited digitizing, cloud game library, and
-            shareable replays. This policy explains how cancellations and
-            refunds work for Pro subscriptions.
+            {LEGAL.siteName} offers a <strong className="text-ink">Free</strong>{" "}
+            plan (2 lifetime scans), recurring <strong className="text-ink">Pro</strong>{" "}
+            subscriptions, and an <strong className="text-ink">Enterprise</strong>{" "}
+            pay-as-you-go prepaid scan wallet. This policy explains cancellations
+            and refunds for paid products.
           </p>
         </Section>
 
         <Section title="Plans and billing">
           <p>
-            <strong className="text-ink">Pro · Monthly:</strong> Billed every
-            month. Renews automatically until cancelled.
+            <strong className="text-ink">Free:</strong> No payment required. No
+            refunds apply.
           </p>
           <p>
-            <strong className="text-ink">Pro · Yearly:</strong> Billed once per
-            year. Renews automatically until cancelled.
+            <strong className="text-ink">Pro · Monthly:</strong>{" "}
+            {formatInr(monthly.priceInr)}/month · up to {monthly.scanLimit} scans
+            per month. Renews automatically until cancelled.
+          </p>
+          <p>
+            <strong className="text-ink">Pro · Yearly:</strong>{" "}
+            {formatInr(yearly.priceInr)}/year · up to{" "}
+            {yearly.scanLimit.toLocaleString("en-IN")} scans per year. Renews
+            automatically until cancelled.
+          </p>
+          <p>
+            <strong className="text-ink">Enterprise (pay-as-you-go):</strong>{" "}
+            One-time prepaid scan packs from{" "}
+            {formatOrganizerInr(calculateOrganizerAmount(ORGANIZER_MIN_SCANS))}{" "}
+            (minimum {ORGANIZER_MIN_SCANS.toLocaleString("en-IN")} scans per pack).
+            Credits stay in your wallet until used. You may buy additional packs at
+            any time. This is not a recurring subscription.
           </p>
           <p>
             All payments are processed by{" "}
@@ -90,67 +101,90 @@ export default function RefundPolicyPage() {
           </p>
         </Section>
 
-        <Section title="Cancellation">
+        <Section title="Pro subscription cancellation">
           <p>
             You may cancel your Pro subscription at any time from your account
             billing settings. When you cancel:
           </p>
           <ul className="list-disc space-y-2 pl-5">
             <li>
-              Your Pro access continues until the end of the current billing
-              period you have already paid for
+              Pro access continues until the end of the current billing period you
+              have already paid for
             </li>
             <li>
-              Auto-renewal is stopped — you will not be charged again unless you
+              Auto-renewal stops — you will not be charged again unless you
               resubscribe
             </li>
             <li>
-              Your saved games remain in your account; free-plan limits apply
-              after the paid period ends
+              Your saved games remain in your account; free-plan limits apply after
+              the paid period ends
             </li>
           </ul>
           <p>
-            Cancellation takes effect at the end of the current billing cycle,
-            not immediately, unless otherwise required by applicable law.
+            Cancellation takes effect at the end of the current billing cycle, not
+            immediately, unless otherwise required by applicable law.
           </p>
         </Section>
 
-        <Section title="Refund eligibility">
-          <p>
-            We want you to be satisfied with {LEGAL.siteName}. Refunds may be
-            issued in the following cases:
-          </p>
+        <Section title="Refund eligibility — Pro subscriptions">
+          <p>Refunds for Pro subscriptions may be issued when:</p>
           <ul className="list-disc space-y-2 pl-5">
             <li>
               <strong className="text-ink">Within 7 days of first purchase:</strong>{" "}
-              If Pro does not meet your expectations, contact us within seven
-              (7) calendar days of your initial subscription payment for a full
-              refund.
+              Contact us within seven (7) calendar days of your initial subscription
+              payment for a full refund if Pro does not meet your expectations.
             </li>
             <li>
               <strong className="text-ink">Duplicate or erroneous charges:</strong>{" "}
-              If you were charged twice or billed in error, we will refund the
-              duplicate amount promptly.
+              We will refund duplicate or mistaken charges promptly.
             </li>
             <li>
               <strong className="text-ink">Extended service outage:</strong>{" "}
-              If a verified platform outage prevented meaningful use of paid
-              features for an extended period, contact us for a proportional
-              credit or refund.
+              A verified platform outage that prevented meaningful use of paid
+              features for an extended period may qualify for a proportional credit
+              or refund.
             </li>
           </ul>
+        </Section>
+
+        <Section title="Refund eligibility — Enterprise pay-as-you-go credits">
+          <p>Enterprise packs are prepaid scan credits, not subscriptions:</p>
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="text-ink">Within 7 days, unused credits:</strong>{" "}
+              If no scans have been consumed from a pack within seven (7) calendar
+              days of purchase, you may request a full refund of that pack.
+            </li>
+            <li>
+              <strong className="text-ink">Partially used packs:</strong> Once scans
+              from a prepaid pack have been used, the pack is generally
+              non-refundable except for billing errors.
+            </li>
+            <li>
+              <strong className="text-ink">Duplicate or erroneous charges:</strong>{" "}
+              We will refund mistaken or duplicate Enterprise pack payments.
+            </li>
+          </ul>
+          <p>
+            Unused prepaid credits remain in your wallet and do not expire while your
+            account is active, unless otherwise stated at purchase.
+          </p>
         </Section>
 
         <Section title="Non-refundable cases">
           <p>Refunds are generally not provided when:</p>
           <ul className="list-disc space-y-2 pl-5">
             <li>
-              You cancel midway through an active billing period (access
-              continues until period end)
+              You cancel a Pro subscription midway through an active billing period
+              (access continues until period end)
             </li>
             <li>
-              You change from yearly to monthly or vice versa mid-cycle without
-              a qualifying reason above
+              You change between monthly and yearly billing mid-cycle without a
+              qualifying reason above
+            </li>
+            <li>
+              Enterprise prepaid scans have already been consumed from the pack in
+              question
             </li>
             <li>
               Free-plan scan limits were already consumed before upgrading
@@ -172,13 +206,13 @@ export default function RefundPolicyPage() {
               {LEGAL.contactEmail}
             </a>{" "}
             with your account username, the email used at checkout, payment date,
-            and a brief description of your request. We aim to respond within 2–3
-            business days.
+            plan type (Pro or Enterprise), and a brief description. We aim to respond
+            within 2–3 business days.
           </p>
           <p>
-            Approved refunds are processed back to your original payment method
-            via Razorpay. Depending on your bank or payment provider, funds may
-            take 5–10 business days to appear.
+            Approved refunds are processed back to your original payment method via
+            Razorpay. Depending on your bank or payment provider, funds may take 5–10
+            business days to appear.
           </p>
         </Section>
 
@@ -198,15 +232,15 @@ export default function RefundPolicyPage() {
 
         <Section title="Data after cancellation">
           <p>
-            If your subscription ends, your account and saved games remain. We
-            do not delete your data upon cancellation. Your scoresheets and
-            games stay in your private account and are never sold or shared.
-            See our{" "}
-            <Link
-              href="/privacy"
-              className="legal-link !text-ink"
-            >
+            If your Pro subscription ends, your account and saved games remain. We
+            do not delete your data upon cancellation. Enterprise prepaid credits you
+            have already purchased remain in your wallet until used. See our{" "}
+            <Link href="/privacy" className="legal-link !text-ink">
               Privacy Policy
+            </Link>{" "}
+            and{" "}
+            <Link href="/terms" className="legal-link !text-ink">
+              Terms &amp; Conditions
             </Link>{" "}
             for details.
           </p>

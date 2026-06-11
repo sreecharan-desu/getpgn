@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { prisma } from '@/lib/db';
-import { isProUser } from '@/lib/proAccess';
+import { requirePaidLibraryAccess } from '@/lib/requirePaidLibrary';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -10,11 +10,8 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return auth.response;
     const user = auth.user;
 
-    if (!isProUser(user)) {
-      return NextResponse.json({
-        error: 'Public sharing links are a premium feature. Please upgrade.'
-      }, { status: 403 });
-    }
+    const library = await requirePaidLibraryAccess(user);
+    if (!library.ok) return library.response;
 
     const { gameId, action } = await req.json(); // action can be 'enable' or 'disable'
     if (!gameId) {

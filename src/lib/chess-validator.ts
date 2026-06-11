@@ -1,4 +1,14 @@
 import { Chess, Move } from 'chess.js';
+import {
+  expandOcrNotationVariants,
+  OCR_AUTO_RECOVER_MIN_SIMILARITY,
+  OCR_GARBAGE_RECOVER_MIN_SIMILARITY,
+} from '@/lib/chessOcrVariants';
+import { sanitizeChessNotation } from '@/lib/chess-notation';
+import {
+  isRecoverableExtractedNotation,
+  preSanitizeExtractedNotation,
+} from '@/lib/extractedNotation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +34,11 @@ export interface ValidationResult {
   pgn: string;
 }
 
+export interface ValidateOptions {
+  /** Stricter illegal-move auto-recovery for live model extraction. */
+  strictRecovery?: boolean;
+}
+
 type PieceType = 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
 
 // ─── Notation Helpers ─────────────────────────────────────────────────────────
@@ -38,10 +53,7 @@ function isGameResult(notation: string): boolean {
 }
 
 function normalizeNotation(notation: string): string {
-  const norm = notation.trim();
-  if (norm === '0-0' || norm === '00') return 'O-O';
-  if (norm === '0-0-0' || norm === '000') return 'O-O-O';
-  return norm;
+  return sanitizeChessNotation(preSanitizeExtractedNotation(notation));
 }
 
 /** LCS-based SequenceMatcher.ratio() equivalent */
@@ -148,9 +160,26 @@ function getPossibleNotations(move: Move): string[] {
   return notations;
 }
 
-function findCandidates(chess: Chess, notation: string): Move[] {
-  const cleanedUser = cleanNotation(notation);
-  if (!cleanedUser) return [];
+function cleanedUserForms(notation: string): Set<string> {
+  const forms = new Set<string>();
+  for (const variant of expandOcrNotationVariants(notation)) {
+    const c = cleanNotation(variant);
+    if (c) forms.add(c);
+  }
+  const direct = cleanNotation(notation);
+  if (direct) forms.add(direct);
+  return forms;
+}
+
+function findCandidates(
+  chess: Chess,
+  notation: string,
+  ocrMode: boolean,
+): Move[] {
+  const userForms = ocrMode
+    ? cleanedUserForms(notation)
+    : new Set([cleanNotation(notation)].filter(Boolean));
+  if (userForms.size === 0) return [];
 
   const impliedTypes = getImpliedPieceTypes(notation);
   const legalMoves = chess.moves({ verbose: true }) as Move[];
@@ -161,7 +190,7 @@ function findCandidates(chess: Chess, notation: string): Move[] {
     if (!impliedTypes.has(move.piece as PieceType)) continue;
     const uci = `${move.from}${move.to}${move.promotion ?? ''}`;
     for (const form of getPossibleNotations(move)) {
-      if (cleanNotation(form) === cleanedUser && !seen.has(uci)) {
+      if (userForms.has(cleanNotation(form)) && !seen.has(uci)) {
         candidates.push(move);
         seen.add(uci);
         break;
@@ -171,10 +200,38 @@ function findCandidates(chess: Chess, notation: string): Move[] {
   return candidates;
 }
 
-function getSuggestions(chess: Chess, userNotation: string): string[] {
+function bestSimilarity(san: string, userNotation: string): number {
+  let best = getSimilarity(san, userNotation);
+  for (const variant of expandOcrNotationVariants(userNotation)) {
+    best = Math.max(best, getSimilarity(san, variant));
+  }
+  return best;
+}
+
+function notationSimilarity(
+  san: string,
+  userNotation: string,
+  ocrMode: boolean,
+): number {
+  return ocrMode
+    ? bestSimilarity(san, userNotation)
+    : getSimilarity(san, userNotation);
+}
+
+function getSuggestions(
+  chess: Chess,
+  userNotation: string,
+  ocrMode: boolean,
+): string[] {
   if (!userNotation) return [];
   const legalMoves = chess.moves({ verbose: true }) as Move[];
-  const scored = legalMoves.map(m => ({ score: getSimilarity(m.san, userNotation), san: m.san }));
+  let scored = legalMoves.map((m) => ({
+    score: notationSimilarity(m.san, userNotation, ocrMode),
+    san: m.san,
+  }));
+  if (ocrMode) {
+    scored = scored.filter((row) => row.score >= 0.28);
+  }
   scored.sort((a, b) => b.score - a.score);
   const unique: string[] = [];
   for (const { san } of scored) {
@@ -189,8 +246,10 @@ function getSuggestions(chess: Chess, userNotation: string): string[] {
 // ─── Main Validator ───────────────────────────────────────────────────────────
 
 export function validateChessMoves(
-  rawMoves: Array<{ moveNumber: number; white: unknown; black: unknown }>
+  rawMoves: Array<{ moveNumber: number; white: unknown; black: unknown }>,
+  options: ValidateOptions = {},
 ): ValidationResult {
+  const strictRecovery = options.strictRecovery ?? false;
   const chess = new Chess();
   const validatedMoves: TurnResult[] = [];
   let isBroken = false;
@@ -211,13 +270,15 @@ export function validateChessMoves(
 
   for (const turn of rawMoves) {
     const { moveNumber } = turn;
-    const whiteNotation = extractNotation(turn.white);
-    const blackNotation = extractNotation(turn.black);
+    const whiteRaw = extractNotation(turn.white);
+    const blackRaw = extractNotation(turn.black);
+    const whiteNotation = preSanitizeExtractedNotation(whiteRaw);
+    const blackNotation = preSanitizeExtractedNotation(blackRaw);
 
-    const whiteRes: PlyResult = { original: whiteNotation, status: 'missing', san: null, candidates: [], suggestions: [], fen: null, uci: null };
-    const blackRes: PlyResult  = { original: blackNotation, status: 'missing', san: null, candidates: [], suggestions: [], fen: null, uci: null };
+    const whiteRes: PlyResult = { original: whiteRaw, status: 'missing', san: null, candidates: [], suggestions: [], fen: null, uci: null };
+    const blackRes: PlyResult  = { original: blackRaw, status: 'missing', san: null, candidates: [], suggestions: [], fen: null, uci: null };
 
-    function validatePly(notation: string, plyRes: PlyResult): boolean {
+    function validatePly(notation: string, rawNotation: string, plyRes: PlyResult): boolean {
       if (!notation) {
         plyRes.status = 'missing'; stats.missing++; isBroken = true; return false;
       }
@@ -228,9 +289,14 @@ export function validateChessMoves(
         plyRes.status = 'illegal'; stats.illegal++; gameIsValid = false; return false;
       }
 
+      const ocrMode = strictRecovery;
+      const strictSan = ocrMode
+        ? normalizeNotation(notation)
+        : sanitizeChessNotation(notation);
+
       // ── Step 1: Strict SAN parse ──────────────────────────────────────────
       try {
-        const move = chess.move(normalizeNotation(notation));
+        const move = chess.move(strictSan);
         stats.valid++;
         plyRes.status = 'valid';
         plyRes.san   = move.san;
@@ -240,8 +306,8 @@ export function validateChessMoves(
         return true;
       } catch { /* fall through */ }
 
-      // ── Step 2: Fuzzy candidate matching ─────────────────────────────────
-      const candidates = findCandidates(chess, notation);
+      // ── Step 2: Fuzzy candidate matching ───────────────────────────────────
+      const candidates = findCandidates(chess, notation, ocrMode);
 
       if (candidates.length === 1) {
         const move = chess.move(candidates[0].san);
@@ -255,31 +321,87 @@ export function validateChessMoves(
       }
 
       if (candidates.length > 1) {
-        const candidateSans = candidates.map(c => c.san);
-        const move = chess.move(candidates[0].san);
-        plyRes.status     = 'ambiguous';
+        const candidateSans = candidates.map((c) => c.san);
+        let chosen = candidates[0];
+
+        if (ocrMode) {
+          const ranked = [...candidates].sort(
+            (a, b) =>
+              notationSimilarity(b.san, notation, true) -
+              notationSimilarity(a.san, notation, true),
+          );
+          chosen = ranked[0];
+          const margin =
+            notationSimilarity(ranked[0].san, notation, true) -
+            notationSimilarity(ranked[1].san, notation, true);
+          const move = chess.move(chosen.san);
+          if (margin >= 0.12) {
+            stats.valid++;
+            plyRes.status = 'valid';
+          } else {
+            plyRes.status = 'ambiguous';
+            plyRes.candidates = ranked.map((c) => c.san);
+            stats.ambiguous++;
+            stats.recovered++;
+            gameIsValid = false;
+          }
+          plyRes.san = move.san;
+          plyRes.fen = chess.fen();
+          plyRes.uci = `${move.from}${move.to}${move.promotion ?? ''}`;
+          appliedSans.push(move.san);
+          return true;
+        }
+
+        const move = chess.move(chosen.san);
+        plyRes.status = 'ambiguous';
         plyRes.candidates = candidateSans;
-        plyRes.san  = move.san;
-        plyRes.fen  = chess.fen();
-        plyRes.uci  = `${move.from}${move.to}${move.promotion ?? ''}`;
-        stats.ambiguous++; stats.recovered++;
+        plyRes.san = move.san;
+        plyRes.fen = chess.fen();
+        plyRes.uci = `${move.from}${move.to}${move.promotion ?? ''}`;
+        stats.ambiguous++;
+        stats.recovered++;
         gameIsValid = false;
         appliedSans.push(move.san);
         return true;
       }
 
       // ── Step 3: Illegal — suggest closest legal moves & try to recover ────
-      const suggestions = getSuggestions(chess, notation);
+      const suggestions = getSuggestions(chess, notation, ocrMode);
       plyRes.status      = 'illegal';
       plyRes.suggestions = suggestions;
 
-      if (suggestions.length > 0) {
+      const topSuggestion = suggestions[0];
+      const runnerSuggestion = suggestions[1];
+      const recoverScore = topSuggestion
+        ? notationSimilarity(topSuggestion, notation, ocrMode)
+        : 0;
+      const runnerScore = runnerSuggestion
+        ? notationSimilarity(runnerSuggestion, notation, ocrMode)
+        : 0;
+      const recoverable = isRecoverableExtractedNotation(rawNotation);
+      const minRecover = recoverable
+        ? OCR_AUTO_RECOVER_MIN_SIMILARITY
+        : OCR_GARBAGE_RECOVER_MIN_SIMILARITY;
+      const clearWinner =
+        !runnerSuggestion || recoverScore - runnerScore >= 0.08;
+
+      const shouldRecover = strictRecovery
+        ? Boolean(
+            topSuggestion &&
+              clearWinner &&
+              ((recoverable && recoverScore >= minRecover) ||
+                recoverScore >= OCR_GARBAGE_RECOVER_MIN_SIMILARITY),
+          )
+        : Boolean(topSuggestion);
+
+      if (shouldRecover && topSuggestion) {
         try {
-          const move = chess.move(suggestions[0]);
+          const move = chess.move(topSuggestion);
           plyRes.san = move.san;
           plyRes.fen = chess.fen();
           plyRes.uci = `${move.from}${move.to}${move.promotion ?? ''}`;
-          stats.illegal++; stats.recovered++;
+          stats.illegal++;
+          stats.recovered++;
           gameIsValid = false;
           appliedSans.push(move.san);
           return true;
@@ -287,13 +409,13 @@ export function validateChessMoves(
       }
 
       stats.illegal++;
-      isBroken   = true;
+      isBroken = true;
       gameIsValid = false;
       return false;
     }
 
-    validatePly(whiteNotation, whiteRes);
-    validatePly(blackNotation, blackRes);
+    validatePly(whiteNotation, whiteRaw, whiteRes);
+    validatePly(blackNotation, blackRaw, blackRes);
     validatedMoves.push({ moveNumber, white: whiteRes, black: blackRes });
   }
 

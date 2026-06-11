@@ -10,6 +10,8 @@ import {
   revokeProForRefund,
 } from '@/lib/syncRazorpaySubscription';
 import { isBillingDeferred } from '@/lib/razorpaySubscriptions';
+import { completeOrganizerPurchase } from '@/lib/organizerWallet';
+import { notifyOrganizerCreditsAdded, queueProSubscriptionEmail } from '@/lib/notificationEmail';
 import crypto from 'crypto';
 
 function toPaise(value: unknown): number {
@@ -66,6 +68,68 @@ export async function POST(req: NextRequest) {
       const paymentEntity = payload.payload.payment?.entity;
       console.log(`[Razorpay Webhook] payment.authorized: ID ${paymentEntity?.id}, Amount ${paymentEntity?.amount}, Status ${paymentEntity?.status}`);
       return NextResponse.json({ received: true });
+    }
+
+    /** Organizer scan packs — Razorpay Orders (one-time), idempotent credit. */
+    if (event === 'payment.captured' || event === 'order.paid') {
+      const paymentEntity = payload.payload.payment?.entity;
+      const orderEntity = payload.payload.order?.entity;
+      const orderId =
+        paymentEntity?.order_id ?? orderEntity?.id ?? null;
+      const paymentId = paymentEntity?.id ?? null;
+
+      if (orderId && paymentId) {
+        const pending = await prisma.organizerPurchase.findUnique({
+          where: { razorpayOrderId: orderId },
+          select: { id: true, status: true, userId: true, scansPurchased: true },
+        });
+
+        if (pending) {
+          const notes = (paymentEntity?.notes ?? orderEntity?.notes ?? {}) as Record<
+            string,
+            string
+          >;
+          if (notes.product && notes.product !== 'organizer_scans') {
+            console.warn('[Razorpay Webhook] Organizer order notes mismatch:', orderId);
+          }
+
+          const result = await completeOrganizerPurchase({
+            razorpayOrderId: orderId,
+            razorpayPaymentId: paymentId,
+          });
+
+          if (result.ok) {
+            console.log(
+              `[Razorpay Webhook] Organizer credits ${result.alreadyCompleted ? 'already' : ''} applied for order ${orderId}.`,
+            );
+            if (!result.alreadyCompleted) {
+              void notifyOrganizerCreditsAdded({
+                userId: pending.userId,
+                scansAdded: pending.scansPurchased,
+                source: 'purchase',
+              }).catch((err) =>
+                console.error('[Razorpay Webhook] Credits notification failed:', err),
+              );
+            }
+          } else {
+            console.error('[Razorpay Webhook] Organizer credit failed:', result.error);
+          }
+
+          return NextResponse.json({ received: true });
+        }
+      }
+
+      if (event === 'order.paid' && orderEntity?.id) {
+        const orphan = await prisma.organizerPurchase.findUnique({
+          where: { razorpayOrderId: orderEntity.id },
+        });
+        if (orphan) {
+          console.warn(
+            `[Razorpay Webhook] order.paid for organizer ${orderEntity.id} without payment id — awaiting payment.captured.`,
+          );
+          return NextResponse.json({ received: true });
+        }
+      }
     }
 
     // Refund events — revoke Pro immediately on full refund (not at period end).
@@ -165,8 +229,9 @@ export async function POST(req: NextRequest) {
     const start = subscriptionEntity.current_start ? new Date(subscriptionEntity.current_start * 1000) : null;
     const end = subscriptionEntity.current_end ? new Date(subscriptionEntity.current_end * 1000) : null;
     const planType = subscriptionEntity.notes?.planType || user.subscriptionPlan || 'monthly';
+    const dbPlan = planType === 'enterprise' ? 'ENTERPRISE' : 'PAID';
 
-    const activatePro = async (source: string) => {
+    const activatePro = async (source: string, emailEvent: 'renewed' | 'activated' = 'renewed') => {
       if (
         user.subscriptionStatus === 'active' &&
         user.subscriptionEnd &&
@@ -180,7 +245,7 @@ export async function POST(req: NextRequest) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          plan: 'PAID',
+          plan: dbPlan,
           subscriptionId: subscriptionId,
           subscriptionPlan: planType,
           subscriptionStatus: 'active',
@@ -192,6 +257,20 @@ export async function POST(req: NextRequest) {
         },
       });
       console.log(`[Razorpay Webhook] Upgraded user ${user.username} (Pro active) via ${source}. Expires: ${end?.toISOString()}`);
+
+      if (user.email) {
+        queueProSubscriptionEmail(user.email, {
+          username: user.username,
+          planType:
+            planType === 'enterprise'
+              ? 'enterprise'
+              : planType === 'yearly'
+                ? 'yearly'
+                : 'monthly',
+          event: emailEvent,
+          subscriptionEnd: end,
+        });
+      }
     };
 
     switch (event) {
@@ -208,7 +287,7 @@ export async function POST(req: NextRequest) {
           await prisma.user.update({
             where: { id: user.id },
             data: {
-              plan: 'PAID',
+              plan: dbPlan,
               subscriptionId: subscriptionId,
               subscriptionPlan: planType,
               subscriptionStatus: 'authenticated',
@@ -225,13 +304,17 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        await activatePro(event);
+        await activatePro(event, 'activated');
         break;
       }
 
-      case 'subscription.activated':
+      case 'subscription.activated': {
+        await activatePro(event, 'activated');
+        break;
+      }
+
       case 'subscription.charged': {
-        await activatePro(event);
+        await activatePro(event, 'renewed');
         break;
       }
 
@@ -278,6 +361,20 @@ export async function POST(req: NextRequest) {
           }
         });
         console.log(`[Razorpay Webhook] User ${user.username}'s subscription cancelled.`);
+
+        if (user.email) {
+          queueProSubscriptionEmail(user.email, {
+            username: user.username,
+            planType:
+              planType === 'enterprise'
+                ? 'enterprise'
+                : planType === 'yearly'
+                  ? 'yearly'
+                  : 'monthly',
+            event: 'cancelled',
+            subscriptionEnd: user.subscriptionEnd,
+          });
+        }
         break;
       }
 

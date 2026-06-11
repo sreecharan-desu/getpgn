@@ -10,6 +10,8 @@ import {
 } from '@/lib/razorpayServer';
 import {
   isBillingDeferred,
+  fetchSubscriptionAfterCheckout,
+  isPostCheckoutSubscriptionReady,
   type BillingPlanType,
 } from '@/lib/razorpaySubscriptions';
 import { buildProActivationScanFields } from '@/lib/scanLimits';
@@ -69,7 +71,10 @@ export async function POST(req: NextRequest) {
     }
 
     const razorpay = createRazorpayClient(razorpayEnv.config);
-    const subscription = await razorpay.subscriptions.fetch(razorpay_subscription_id);
+    const subscription = await fetchSubscriptionAfterCheckout(
+      razorpay,
+      razorpay_subscription_id,
+    );
 
     const notes = (subscription.notes ?? {}) as Record<string, string>;
     if (notes.userId !== user.id) {
@@ -83,23 +88,40 @@ export async function POST(req: NextRequest) {
     }
 
     const status = subscription.status ?? 'created';
-    if (!['authenticated', 'active', 'pending'].includes(status)) {
+    if (!isPostCheckoutSubscriptionReady(status, true)) {
       console.error('[Verify Subscription] Unexpected subscription status after checkout:', status);
       return NextResponse.json(
-        { error: 'Subscription authorisation is not complete. Please try checkout again.' },
+        {
+          error:
+            'Subscription authorisation is not complete yet. Wait a few seconds and try checkout again, or contact support if you were charged.',
+        },
         { status: 400 },
       );
     }
 
-    const planType: BillingPlanType = notes.planType === 'yearly' ? 'yearly' : 'monthly';
+    if (status === 'created') {
+      console.warn(
+        '[Verify Subscription] Proceeding with status "created" after valid checkout signature (Razorpay status lag).',
+        { subscriptionId: razorpay_subscription_id },
+      );
+    }
+
+    const planType: BillingPlanType =
+      notes.planType === 'enterprise'
+        ? 'enterprise'
+        : notes.planType === 'yearly'
+          ? 'yearly'
+          : 'monthly';
+    const dbPlan = planType === 'enterprise' ? 'ENTERPRISE' : 'PAID';
     const now = new Date();
     const deferred = isBillingDeferred(subscription, now);
     const periodEndSec =
       subscription.current_end ??
       subscription.end_at ??
       null;
+    const fallbackDays = planType === 'monthly' ? 30 : 365;
     const fallbackExpiry = new Date(
-      now.getTime() + (planType === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000,
+      now.getTime() + fallbackDays * 24 * 60 * 60 * 1000,
     );
     const expiryDate = periodEndSec ? new Date(periodEndSec * 1000) : fallbackExpiry;
     const periodStartSec = subscription.current_start ?? subscription.start_at ?? null;
@@ -129,7 +151,7 @@ export async function POST(req: NextRequest) {
       where: { id: user.id },
       data: deferred
         ? {
-            plan: 'PAID',
+            plan: dbPlan,
             subscriptionId: razorpay_subscription_id,
             subscriptionPlan: planType,
             subscriptionStatus: 'authenticated',
@@ -139,7 +161,7 @@ export async function POST(req: NextRequest) {
             paymentProvider: 'razorpay',
           }
         : {
-            plan: 'PAID',
+            plan: dbPlan,
             subscriptionId: razorpay_subscription_id,
             subscriptionPlan: planType,
             subscriptionStatus: 'active',

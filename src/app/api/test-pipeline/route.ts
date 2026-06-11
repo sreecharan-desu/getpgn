@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { requireVerifiedUser } from '@/lib/requireAuth';
 import { validateChessMoves } from '@/lib/chess-validator';
+import { normalizeExtractedMoves } from '@/lib/extractedNotation';
 import {
   getScanUsage,
   reserveScanForUser,
@@ -11,6 +12,10 @@ import {
 } from '@/lib/scanLimits';
 import { isDevRouteAllowed, devRouteBlockedResponse } from '@/lib/security';
 import { rateLimitByIp } from '@/lib/rateLimit';
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  EXTRACTION_USER_MESSAGE,
+} from '@/lib/extractionPrompt';
 
 // ─── Image Compression ────────────────────────────────────────────────────────
 const MAX_WIDTH = 1200;
@@ -80,28 +85,10 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const systemPrompt = `You are an expert chess scoresheet OCR parser. Extract every chess move from the scoresheet image.
+    const systemPrompt = `${EXTRACTION_SYSTEM_PROMPT}
 
-Output ONLY valid JSON in exactly this format, no other text:
-{
-  "moves": [
-    {"move_number": 1, "white": "e4", "black": "e5"},
-    {"move_number": 2, "white": "Nf3", "black": "Nc6"}
-  ],
-  "uncertain_moves": [
-    {"move_number": 5, "player": "white", "notation": "Bb5", "reason": "handwriting unclear"}
-  ]
-}
-
-Rules:
-1. Extract moves EXACTLY as written. Do NOT attempt to validate or fix legality yourself.
-2. Piece letters: K=King, Q=Queen, R=Rook, B=Bishop, N=Knight. If a letter looks like W or J, it is most likely N (Knight).
-3. Castling: use capital letter O, not zero: O-O or O-O-O.
-4. File letters are a-h (lowercase). If a letter could be 'b' or 'h', extract what you see literally.
-5. Captures use lowercase 'x', not 'X'. Convert uppercase X to lowercase x.
-6. Do NOT include game result tokens (1-0, 0-1, 1/2-1/2, ½-½, *) as moves. If the game ends with a score, use empty string "" for black.
-7. If a move is ambiguous or illegible, make your best read in "moves" and also add it to "uncertain_moves" with the reason.
-8. If you see "9" where a file letter should be (e.g. "N9e7", "B93"), extract it as "9" and flag as uncertain.`;
+Also include uncertain_moves when confidence < 0.75:
+"uncertain_moves": [{"move_number": 5, "player": "white", "notation": "Bb5", "reason": "handwriting unclear"}]`;
 
     const aiStartTime = Date.now();
     const modelName = process.env.AI_MODEL_NAME || ['ge', 'mi', 'ni', '-2.5-flash-lite'].join('');
@@ -112,7 +99,7 @@ Rules:
           role: 'user',
           parts: [
             { inlineData: { data: base64Data, mimeType } },
-            { text: 'Extract all chess moves from this scoresheet and return them as JSON.' },
+            { text: EXTRACTION_USER_MESSAGE },
           ],
         },
       ],
@@ -180,7 +167,10 @@ Rules:
       })),
     };
 
-    const validatorResult = validateChessMoves(validatorPayload.moves);
+    const validatorResult = validateChessMoves(
+      normalizeExtractedMoves(validatorPayload.moves),
+      { strictRecovery: true },
+    );
 
     let movesDetected = 0;
     let legalMovesCount = 0;

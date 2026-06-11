@@ -1,40 +1,47 @@
 import type Razorpay from 'razorpay';
+import { getPlanCatalog, type CatalogPlanId } from '@/lib/planCatalog';
 
-export type BillingPlanType = 'monthly' | 'yearly';
+export type BillingPlanType = CatalogPlanId;
 
-/** Expected Razorpay plan shape for GetPGN Pro (amounts in paise). */
-export const PLAN_SPECS: Record<
-  BillingPlanType,
-  {
-    period: 'monthly' | 'yearly';
-    interval: number;
-    amountPaise: number;
-    currency: 'INR';
-    name: string;
-    description: string;
-    /** Billing cycles — bounds subscription length (Razorpay max ~100 years). */
-    totalCount: number;
-  }
-> = {
-  monthly: {
-    period: 'monthly',
-    interval: 1,
-    amountPaise: 10_000, // ₹100
-    currency: 'INR',
-    name: 'GetPGN Pro Monthly',
-    description: '₹100/month · 100 scans/month',
-    totalCount: 120, // 10 years of monthly billing
-  },
-  yearly: {
-    period: 'yearly',
-    interval: 1,
-    amountPaise: 100_000, // ₹1,000
-    currency: 'INR',
-    name: 'GetPGN Pro Yearly',
-    description: '₹1,000/year · 1,200 scans/year',
-    totalCount: 10, // 10 years
-  },
-};
+function buildPlanSpecs() {
+  const catalog = getPlanCatalog();
+  return {
+    monthly: {
+      period: 'monthly' as const,
+      interval: 1,
+      amountPaise: catalog.monthly.pricePaise,
+      currency: 'INR' as const,
+      name: `GetPGN ${catalog.monthly.displayName}`,
+      description: catalog.monthly.description,
+      totalCount: 120,
+    },
+    yearly: {
+      period: 'yearly' as const,
+      interval: 1,
+      amountPaise: catalog.yearly.pricePaise,
+      currency: 'INR' as const,
+      name: `GetPGN ${catalog.yearly.displayName}`,
+      description: catalog.yearly.description,
+      totalCount: 10,
+    },
+    enterprise: {
+      period: 'yearly' as const,
+      interval: 1,
+      amountPaise: catalog.enterprise.pricePaise,
+      currency: 'INR' as const,
+      name: `GetPGN ${catalog.enterprise.displayName}`,
+      description: catalog.enterprise.description,
+      totalCount: 10,
+    },
+  };
+}
+
+/** Expected Razorpay plan shape (amounts in paise). Built from plan catalog env. */
+export function getPlanSpecs() {
+  return buildPlanSpecs();
+}
+
+export const PLAN_SPECS = buildPlanSpecs();
 
 /** How long the customer has to complete mandate authorisation at checkout. */
 export const SUBSCRIPTION_AUTH_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
@@ -205,6 +212,9 @@ type RazorpaySubscriptionEntity = {
   expire_by?: number | null;
   charge_at?: number | null;
   remaining_count?: number | null;
+  current_start?: number | null;
+  current_end?: number | null;
+  notes?: Record<string, string>;
 };
 
 export function assertSubscriptionBounded(
@@ -259,6 +269,48 @@ export function canCompleteSubscriptionAuth(
     return false;
   }
   return true;
+}
+
+const POST_CHECKOUT_READY_STATUSES = new Set(['authenticated', 'active', 'pending']);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Poll Razorpay after checkout — status often lags behind the signed payment callback. */
+export async function fetchSubscriptionAfterCheckout(
+  razorpay: Razorpay,
+  subscriptionId: string,
+  options?: { maxAttempts?: number; delayMs?: number },
+): Promise<RazorpaySubscriptionEntity> {
+  const maxAttempts = options?.maxAttempts ?? 6;
+  const delayMs = options?.delayMs ?? 500;
+
+  let latest: RazorpaySubscriptionEntity | null = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    latest = (await razorpay.subscriptions.fetch(
+      subscriptionId,
+    )) as unknown as RazorpaySubscriptionEntity;
+    const status = latest.status ?? 'created';
+    if (POST_CHECKOUT_READY_STATUSES.has(status)) {
+      return latest;
+    }
+    if (attempt < maxAttempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return latest!;
+}
+
+export function isPostCheckoutSubscriptionReady(
+  status: string | null | undefined,
+  signatureVerified: boolean,
+): boolean {
+  const normalized = status ?? 'created';
+  if (POST_CHECKOUT_READY_STATUSES.has(normalized)) return true;
+  // Razorpay test/live APIs often still report `created` when checkout already returned a valid signature.
+  return signatureVerified && normalized === 'created';
 }
 
 /** Reuse an open checkout subscription instead of creating duplicates on retry. */

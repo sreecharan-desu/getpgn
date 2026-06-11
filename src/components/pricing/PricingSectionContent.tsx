@@ -2,11 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Minus } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { RazorpayTrustBar } from "@/components/ui/RazorpayLogo";
 import { LegalLink } from "@/components/legal/PolicyFooter";
-import { FREE_SCAN_LIMIT } from "@/components/dashboard/FreePlanUI";
 import { storePendingUpgrade } from "@/lib/razorpayCheckout";
 import { ProFeatureList } from "./ProFeatureList";
 import {
@@ -17,21 +16,22 @@ import {
   PRICING_HEADLINE,
   PRICING_SUBLINE,
   RAZORPAY_FOOTER_LINE,
-  getFreeFeatures,
 } from "./sharedPricing";
+import { FREE_SCAN_LIMIT } from "@/components/dashboard/FreePlanUI";
+import { PRICING_DISPLAY, formatInr } from "@/lib/pricingDisplay";
+import {
+  ORGANIZER_MIN_SCANS,
+  formatOrganizerInr,
+} from "@/lib/organizerPricing";
 
 export interface PricingSectionContentProps {
-  /** Landing section vs frameless modal overlay. */
   presentation?: "section" | "modal";
-  /** Extra content below subtitle (e.g. scan badge in modal). */
   headerExtra?: React.ReactNode;
-  /** Dashboard checkout — Pro buttons open Razorpay instead of linking to signup. */
   checkoutMode?: boolean;
   billingLoading?: boolean;
   onCheckoutMonthly?: () => void;
   onCheckoutYearly?: () => void;
-  /** In checkout mode, show Free card as current plan. */
-  showCurrentFreePlan?: boolean;
+  onCheckoutEnterprise?: () => void;
 }
 
 export function PricingSectionContent({
@@ -41,29 +41,27 @@ export function PricingSectionContent({
   billingLoading = false,
   onCheckoutMonthly,
   onCheckoutYearly,
-  showCurrentFreePlan = false,
+  onCheckoutEnterprise,
 }: PricingSectionContentProps) {
-  const freeFeatures = getFreeFeatures(FREE_SCAN_LIMIT);
+  const { monthly, yearly } = PRICING_DISPLAY;
+  const organizerMinInr = ORGANIZER_MIN_SCANS;
+  const showFreePlan = !checkoutMode;
 
   const isModal = presentation === "modal";
-  const ctaMt = isModal ? "mt-5" : "mt-6";
-  const priceMt = isModal ? "mt-5" : "mt-6";
-  const listMt = isModal ? "mt-7" : "mt-8";
-  const priceSize = isModal ? "text-[1.75rem]" : "text-[2rem]";
   const footerMt = isModal ? "mt-7 gap-3 pt-6" : "mt-10 gap-4 pt-8";
-  const descSize = isModal ? "text-[13px]" : "text-[13px]";
-  const titleSize = isModal ? "text-[15px]" : "text-[15px]";
-  const featureSize = isModal ? "text-[13px]" : "text-[13px]";
-  const featureGap = isModal ? "space-y-2.5" : "space-y-3";
-  const featureIcon = isModal ? "h-4 w-4" : "h-4 w-4";
-  const btnSize = isModal ? "btn-md" : "btn-md";
+  const descSize = "text-[13px]";
+  const titleSize = "text-[15px]";
+  const priceSize = isModal ? "text-[1.75rem]" : "text-[2rem]";
+  const featureSize = "text-[13px]";
+  const featureGap = "space-y-3";
+  const featureIcon = "h-4 w-4";
+  const btnSize = "btn-md";
 
   const ctaClass = (variant: "primary" | "secondary", disabled = false) =>
     [
       variant === "primary" ? "btn-primary" : "btn-secondary",
       btnSize,
       "w-full",
-      ctaMt,
       disabled ? "opacity-60" : "",
     ]
       .filter(Boolean)
@@ -71,11 +69,13 @@ export function PricingSectionContent({
 
   const cardBase = isModal ? PRICING_CARD_MODAL_BASE : PRICING_CARD_BASE;
   const cardHighlight = isModal ? PRICING_CARD_MODAL_HIGHLIGHT : PRICING_CARD_HIGHLIGHT;
-  /** Free plan stays in desktop grid; mobile scroll focuses on Pro tiers. */
-  const freeCardVisibility = isModal ? "hidden md:flex" : "hidden lg:flex";
   const gridClass = isModal
-    ? "-mx-1 mt-6 pb-2 md:mx-0 md:pb-0"
-    : "-mx-1 mx-auto mt-10 w-full max-w-5xl gap-5 pb-2 sm:mt-12 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:pb-0";
+    ? showFreePlan
+      ? "-mx-1 mt-6 items-stretch pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0 xl:grid-cols-4"
+      : "-mx-1 mx-auto mt-6 w-full max-w-5xl items-stretch gap-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:pb-0"
+    : `-mx-1 mx-auto mt-10 w-full max-w-6xl items-stretch gap-5 pb-2 sm:mt-12 lg:grid lg:items-stretch lg:gap-5 lg:overflow-visible lg:pb-0 ${
+        showFreePlan ? "lg:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-3"
+      }`;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -99,23 +99,65 @@ export function PricingSectionContent({
     };
   }, [isModal]);
 
-  const renderPriceRow = (
-    price: React.ReactNode,
-    cta: React.ReactNode,
-    subtext?: React.ReactNode,
+  const priceBlock = (
+    amount: string,
+    suffix: string,
+    options?: { prefix?: string },
   ) => (
-    <>
-      <div className={priceMt}>{price}</div>
-      {subtext}
-      {cta}
-    </>
+    <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+      {options?.prefix ? (
+        <span className={`${descSize} font-medium text-muted`}>{options.prefix}</span>
+      ) : null}
+      <span className={`${priceSize} font-semibold tracking-tight text-ink`}>{amount}</span>
+      {suffix ? <span className={`${descSize} text-muted`}>{suffix}</span> : null}
+    </div>
   );
 
-  const priceBlock = (amount: string, suffix: string) => (
-    <div className="flex items-baseline gap-1.5">
-      <span className={`${priceSize} font-semibold tracking-tight text-ink`}>{amount}</span>
-      <span className={`${descSize} text-muted`}>{suffix}</span>
-    </div>
+  const renderCardShell = (
+    className: string,
+    {
+      title,
+      tagline,
+      price,
+      subtext,
+      cta,
+      features,
+      badge,
+      badgeVariant = "featured",
+    }: {
+      title: string;
+      tagline: string;
+      price: React.ReactNode;
+      subtext: React.ReactNode;
+      cta: React.ReactNode;
+      features: React.ReactNode;
+      badge?: React.ReactNode;
+      badgeVariant?: "featured" | "subtle";
+    },
+  ) => (
+    <article className={className}>
+      {badge ? (
+        <div
+          className={
+            badgeVariant === "featured"
+              ? "pricing-card__badge-row"
+              : "pricing-card__badge-row pricing-card__badge-row--subtle"
+          }
+        >
+          {badge}
+        </div>
+      ) : null}
+      <div className="pricing-card__intro">
+        <h3 className={`${titleSize} font-medium text-ink`}>{title}</h3>
+        <p className={`mt-0.5 ${descSize} text-muted`}>{tagline}</p>
+      </div>
+      <div className="pricing-card__price-block">
+        {price}
+        <div className="pricing-card__subtext">{subtext}</div>
+      </div>
+      <div className="pricing-card__cta">{cta}</div>
+      <div className="pricing-card__features">{features}</div>
+    </article>
   );
 
   const proMonthlyCta = checkoutMode ? (
@@ -124,7 +166,7 @@ export function PricingSectionContent({
       disabled={billingLoading}
       aria-busy={billingLoading || undefined}
       onClick={onCheckoutMonthly}
-      className={ctaClass("secondary")}
+      className={ctaClass("secondary", billingLoading)}
     >
       {billingLoading ? (
         <>
@@ -132,9 +174,7 @@ export function PricingSectionContent({
           Opening Razorpay…
         </>
       ) : (
-        <>
-          Get started
-        </>
+        "Get started"
       )}
     </button>
   ) : (
@@ -154,7 +194,7 @@ export function PricingSectionContent({
       disabled={billingLoading}
       aria-busy={billingLoading || undefined}
       onClick={onCheckoutYearly}
-      className={ctaClass("primary")}
+      className={ctaClass("primary", billingLoading)}
     >
       {billingLoading ? (
         <>
@@ -162,9 +202,7 @@ export function PricingSectionContent({
           Opening Razorpay…
         </>
       ) : (
-        <>
-          Get started
-        </>
+        "Get started"
       )}
     </button>
   ) : (
@@ -178,16 +216,82 @@ export function PricingSectionContent({
     </Link>
   );
 
-  const freeCta =
-    showCurrentFreePlan && checkoutMode ? (
-      <button type="button" disabled className={ctaClass("secondary", true)}>
-        Current plan
-      </button>
-    ) : (
-      <Link href="/signup" prefetch className={ctaClass("secondary")}>
-        Get started
-      </Link>
+  const enterpriseCta = checkoutMode ? (
+    <button
+      type="button"
+      disabled={billingLoading}
+      onClick={onCheckoutEnterprise}
+      className={ctaClass("primary", billingLoading)}
+    >
+      Buy Enterprise pack
+    </button>
+  ) : (
+    <Link href="/organizer" prefetch className={ctaClass("primary")}>
+      Buy Enterprise pack
+    </Link>
+  );
+
+  const freeCta = (
+    <Link href="/signup" prefetch className={ctaClass("secondary")}>
+      Start free
+    </Link>
+  );
+
+  const freeFeatures = [
+    `${FREE_SCAN_LIMIT} lifetime scoresheet scans`,
+    "Move validation & session PGN export",
+    "No cloud library or share links",
+  ] as const;
+
+  const enterpriseFeatures = [
+    `${ORGANIZER_MIN_SCANS.toLocaleString("en-IN")}+ scans · add anytime`,
+    "Public tournament game library",
+    "Shareable library link for viewers",
+    "Pro features while credits are available",
+  ] as const;
+
+  const enterpriseBadge = (
+    <span className="pricing-card__badge">Recommended for organizers</span>
+  );
+
+  const yearlyBadge = (
+    <span className="pricing-card__badge pricing-card__badge--subtle">Best value</span>
+  );
+
+  const featureList = (
+    items: readonly string[],
+    options?: { excluded?: readonly string[] },
+  ) => {
+    const excluded = new Set(options?.excluded ?? []);
+    return (
+      <ul className={`${featureGap}`}>
+        {items.map((f) => {
+          const isExcluded = excluded.has(f);
+          return (
+            <li
+              key={f}
+              className={`flex items-start gap-2.5 ${featureSize} leading-snug ${
+                isExcluded ? "text-muted-2" : "text-muted"
+              }`}
+            >
+              {isExcluded ? (
+                <Minus
+                  className={`mt-0.5 ${featureIcon} shrink-0 text-muted-2/80`}
+                  strokeWidth={2.5}
+                />
+              ) : (
+                <Check
+                  className={`mt-0.5 ${featureIcon} shrink-0 text-muted-2`}
+                  strokeWidth={2.5}
+                />
+              )}
+              {f}
+            </li>
+          );
+        })}
+      </ul>
     );
+  };
 
   return (
     <>
@@ -209,7 +313,9 @@ export function PricingSectionContent({
           {PRICING_SUBLINE}
         </p>
         {headerExtra ? (
-          <div className={`flex justify-center ${isModal ? "mt-3" : "mt-5"}`}>{headerExtra}</div>
+          <div className={`flex justify-center ${isModal ? "mt-3" : "mt-5"}`}>
+            {headerExtra}
+          </div>
         ) : null}
       </div>
 
@@ -237,42 +343,51 @@ export function PricingSectionContent({
           ref={scrollRef}
           className={`landing-pricing-scroll flex snap-x snap-mandatory overflow-x-auto ${gridClass}`}
         >
-        <article className={`${cardBase} ${freeCardVisibility}`}>
-          <h3 className={`${titleSize} font-medium text-ink`}>Free</h3>
-          <p className={`mt-0.5 ${descSize} text-muted`}>Perfect for your next tournament round</p>
-          {renderPriceRow(priceBlock("₹0", "forever"), freeCta)}
-          <ul className={`${listMt} ${featureGap} flex-1`}>
-            {freeFeatures.map((f) => (
-              <li key={f} className={`flex items-start gap-2.5 ${featureSize} leading-snug text-muted`}>
-                <Check className={`mt-0.5 ${featureIcon} shrink-0 text-muted-2`} strokeWidth={2.5} />
-                {f}
-              </li>
-            ))}
-          </ul>
-        </article>
+          {showFreePlan
+            ? renderCardShell(cardBase, {
+                title: "Free",
+                tagline: "Try the full digitizing flow",
+                price: priceBlock(formatInr(0), ""),
+                subtext: "Free plan features only",
+                cta: freeCta,
+                features: featureList(freeFeatures, {
+                  excluded: ["No cloud library or share links"],
+                }),
+              })
+            : null}
 
-        <article className={cardHighlight}>
-          <span className="absolute right-4 top-4 rounded-full bg-ink px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] text-paper shadow-sm sm:right-5 sm:top-5 sm:px-2.5 sm:py-1 sm:text-[10px]">
-            Popular
-          </span>
-          <h3 className={`${titleSize} font-medium text-ink`}>Pro · Yearly</h3>
-          <p className={`mt-0.5 ${descSize} text-muted`}>Best value for serious tournament players</p>
-          {renderPriceRow(
-            priceBlock("₹1,000", "/ year"),
-            proYearlyCta,
-            <p className="mt-1 text-[12px] text-muted-2">
-              ₹83/month · save 17% vs monthly
-            </p>,
-          )}
-          <ProFeatureList className={`${listMt} flex-1`} compact={false} />
-        </article>
+          {renderCardShell(cardBase, {
+            title: "Pro · Monthly",
+            tagline: "For players who digitize every week",
+            price: priceBlock(formatInr(monthly.priceInr), "/ month"),
+            subtext: "Billed monthly · cancel anytime",
+            cta: proMonthlyCta,
+            features: <ProFeatureList compact={false} />,
+          })}
 
-        <article className={cardBase}>
-          <h3 className={`${titleSize} font-medium text-ink`}>Pro · Monthly</h3>
-          <p className={`mt-0.5 ${descSize} text-muted`}>For players who digitize every week</p>
-          {renderPriceRow(priceBlock("₹100", "/ month"), proMonthlyCta)}
-          <ProFeatureList className={`${listMt} flex-1`} compact={false} />
-        </article>
+          {renderCardShell(cardHighlight, {
+            badge: enterpriseBadge,
+            badgeVariant: "featured",
+            title: "Enterprise",
+            tagline: "Pay-as-you-go for tournaments & clubs",
+            price: priceBlock(formatOrganizerInr(organizerMinInr), "", {
+              prefix: "From",
+            }),
+            subtext: "One-time scan packs · no subscription",
+            cta: enterpriseCta,
+            features: featureList(enterpriseFeatures),
+          })}
+
+          {renderCardShell(cardBase, {
+            badge: yearlyBadge,
+            badgeVariant: "subtle",
+            title: "Pro · Yearly",
+            tagline: "For serious tournament players",
+            price: priceBlock(formatInr(yearly.priceInr), "/ year"),
+            subtext: `${formatInr(Math.round(yearly.priceInr / 12))}/month · save vs monthly`,
+            cta: proYearlyCta,
+            features: <ProFeatureList compact={false} />,
+          })}
         </div>
       </div>
 
@@ -284,18 +399,23 @@ export function PricingSectionContent({
         <p
           className={`text-center text-[11px] sm:text-left sm:text-[12px] ${isModal ? "" : "text-muted-2"}`}
         >
-          {RAZORPAY_FOOTER_LINE}
-          {" "}
-          ·{" "}
+          {RAZORPAY_FOOTER_LINE} ·{" "}
           <LegalLink href="/privacy" onDark={isModal}>
             Privacy
+          </LegalLink>
+          {" · "}
+          <LegalLink href="/terms" onDark={isModal}>
+            Terms
           </LegalLink>
           {" · "}
           <LegalLink href="/refund" onDark={isModal}>
             Refunds
           </LegalLink>
         </p>
-        <RazorpayTrustBar dark={isModal} className={isModal ? "pb-1 text-white/55" : undefined} />
+        <RazorpayTrustBar
+          dark={isModal}
+          className={isModal ? "pb-1 text-white/55" : undefined}
+        />
       </div>
     </>
   );

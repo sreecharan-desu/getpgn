@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUserWithPassword, getSession } from '@/lib/session';
+import { queuePasswordChangedEmail } from '@/lib/notificationEmail';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: NextRequest) {
@@ -50,6 +51,10 @@ export async function POST(req: NextRequest) {
       where: { id: user.id },
       data: { passwordHash }
     });
+
+    if (user.email) {
+      queuePasswordChangedEmail(user.email, user.username);
+    }
 
     return NextResponse.json({ success: true });
 

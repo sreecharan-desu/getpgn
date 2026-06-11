@@ -2,22 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicyShell } from "@/components/legal/PolicyShell";
 import { LEGAL } from "@/lib/legal";
+import { privacyMetadata } from "@/lib/og/pages";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy",
-  description:
-    "How GetPGN collects, stores, and protects your chess scoresheets, game data, and account information. We never sell or share your data.",
-  alternates: { canonical: `${LEGAL.siteUrl}/privacy` },
-  openGraph: {
-    title: "Privacy Policy · GetPGN",
-    description:
-      "How GetPGN handles your scoresheets and account data. Stored securely, never sold or shared.",
-    url: `${LEGAL.siteUrl}/privacy`,
-    siteName: LEGAL.siteName,
-    type: "website",
-  },
-  robots: { index: true, follow: true },
-};
+export const metadata: Metadata = privacyMetadata();
 
 function Section({
   title,
@@ -44,7 +31,7 @@ export default function PrivacyPolicyPage() {
     description: metadata.description,
     url: `${LEGAL.siteUrl}/privacy`,
     isPartOf: { "@type": "WebSite", name: LEGAL.siteName, url: LEGAL.siteUrl },
-    dateModified: "2026-06-08",
+    dateModified: "2026-06-09",
     publisher: { "@type": "Organization", name: LEGAL.entityName, url: LEGAL.siteUrl },
   };
 
@@ -81,18 +68,26 @@ export default function PrivacyPolicyPage() {
             may be temporarily held in memory during processing.
           </p>
           <p>
-            <strong className="text-ink">Game data:</strong> For Pro users, we
+            <strong className="text-ink">Game data:</strong> On paid plans, we
             store your saved games, move lists, PGN output, and optional
-            shareable replay links in our database.
+            shareable replay links in our database. Free-plan users may export PGN
+            during a session without a permanent cloud library.
           </p>
           <p>
-            <strong className="text-ink">Usage data:</strong> We may record
-            basic usage metrics (such as scan counts on the free plan) to enforce
+            <strong className="text-ink">Enterprise library data:</strong> If you
+            use the Enterprise pay-as-you-go plan and publish games to a public
+            library, we store those games and metadata so viewers with your
+            library link can browse them. You control what is published.
+          </p>
+          <p>
+            <strong className="text-ink">Usage data:</strong> We record scan
+            counts and wallet balances (for example, free lifetime scans, Pro
+            monthly or yearly allowances, or prepaid Enterprise credits) to enforce
             plan limits and improve the product.
           </p>
           <p>
             <strong className="text-ink">Payment information:</strong>{" "}
-            Subscriptions are processed by{" "}
+            Pro subscriptions and Enterprise pay-as-you-go packs are processed by{" "}
             <a
               href="https://razorpay.com"
               className="legal-link !text-ink"
@@ -124,8 +119,8 @@ export default function PrivacyPolicyPage() {
           <p>We use your information only to:</p>
           <ul className="list-disc space-y-2 pl-5">
             <li>Provide scoresheet digitization and move validation</li>
-            <li>Save and replay your games (Pro plan)</li>
-            <li>Authenticate your account and manage subscriptions</li>
+            <li>Save and replay your games on paid plans</li>
+            <li>Authenticate your account, manage subscriptions, and prepaid scan credits</li>
             <li>Respond to support requests and improve reliability</li>
           </ul>
           <p>
@@ -150,7 +145,8 @@ export default function PrivacyPolicyPage() {
               only)
             </li>
             <li>
-              You explicitly enable a public share link for a specific saved game
+              You explicitly enable a public share link for a saved game or publish
+              games to an Enterprise library
             </li>
             <li>
               Needed to protect the security or integrity of the service
@@ -161,8 +157,7 @@ export default function PrivacyPolicyPage() {
         <Section title="Data retention and deletion">
           <p>
             Your account data is retained while your account is active. Saved
-            games remain until you delete them or close your account. You may
-            delete individual games from your library at any time. To request
+            games remain until you close your account. To request
             account deletion, contact us at{" "}
             <a
               href={`mailto:${LEGAL.privacyEmail}`}
@@ -225,10 +220,11 @@ export default function PrivacyPolicyPage() {
               {LEGAL.privacyEmail}
             </a>
             . See also our{" "}
-            <Link
-              href="/refund"
-              className="legal-link !text-ink"
-            >
+            <Link href="/terms" className="legal-link !text-ink">
+              Terms &amp; Conditions
+            </Link>{" "}
+            and{" "}
+            <Link href="/refund" className="legal-link !text-ink">
               Refund &amp; Cancellation Policy
             </Link>
             .

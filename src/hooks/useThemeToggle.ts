@@ -12,45 +12,25 @@ import {
 
 export type ThemeOrigin = { x: number; y: number };
 
-function getTransitionRadius(x: number, y: number): number {
-  const { innerWidth: w, innerHeight: h } = window;
-  const distances = [
-    Math.hypot(x, y),
-    Math.hypot(w - x, y),
-    Math.hypot(x, h - y),
-    Math.hypot(w - x, h - y),
-  ];
-  return Math.max(...distances) + 24;
-}
+const THEME_TRANSITION_MS = 320;
 
-function runThemeViewTransition(update: () => void, origin?: ThemeOrigin) {
+/** Crossfade design tokens in sync — avoids the wireframe flash from circular view transitions. */
+function runThemeTransition(update: () => void) {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const root = document.documentElement;
 
-  if (reduced || typeof document.startViewTransition !== "function") {
+  if (reduced) {
     update();
-    if (!reduced) {
-      root.classList.add("theme-transition");
-      window.setTimeout(() => root.classList.remove("theme-transition"), 260);
-    }
     return;
   }
 
-  const x = origin?.x ?? window.innerWidth;
-  const y = origin?.y ?? 0;
-  root.style.setProperty("--theme-transition-x", `${x}px`);
-  root.style.setProperty("--theme-transition-y", `${y}px`);
-  root.style.setProperty("--theme-transition-r", `${getTransitionRadius(x, y)}px`);
-
-  const transition = document.startViewTransition(() => {
-    update();
-  });
-
-  void transition.finished.finally(() => {
-    root.style.removeProperty("--theme-transition-x");
-    root.style.removeProperty("--theme-transition-y");
-    root.style.removeProperty("--theme-transition-r");
-  });
+  root.classList.add("theme-transition");
+  void root.offsetWidth;
+  update();
+  window.setTimeout(
+    () => root.classList.remove("theme-transition"),
+    THEME_TRANSITION_MS,
+  );
 }
 
 export function useThemeToggle() {
@@ -75,10 +55,9 @@ export function useThemeToggle() {
     return () => media.removeEventListener("change", onSystemThemeChange);
   }, [syncTheme]);
 
-  const toggleTheme = useCallback(
-    (origin?: ThemeOrigin) => {
+  const toggleTheme = useCallback(() => {
       const next: ThemePreference = theme === "dark" ? "light" : "dark";
-      runThemeViewTransition(() => {
+      runThemeTransition(() => {
         try {
           localStorage.setItem(THEME_STORAGE_KEY, next);
         } catch {
@@ -86,10 +65,8 @@ export function useThemeToggle() {
         }
         applyThemePreference(next, { transition: false });
         setTheme(next);
-      }, origin);
-    },
-    [theme],
-  );
+      });
+  }, [theme]);
 
   const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
 

@@ -237,7 +237,7 @@ export async function sendWelcomeEmail(
 
 export type ProWelcomeEmailDetails = {
   username: string;
-  planType: 'monthly' | 'yearly';
+  planType: 'monthly' | 'yearly' | 'enterprise';
   status: 'active' | 'authenticated';
   subscriptionEnd?: Date | string | null;
   subscriptionStart?: Date | string | null;
@@ -250,7 +250,12 @@ export async function sendProWelcomeEmail(
 ): Promise<SendResult> {
   const appUrl = getAppUrl();
   const dashboardUrl = `${appUrl}/dashboard`;
-  const planLabel = details.planType === 'yearly' ? 'Pro Yearly (₹1,000/year)' : 'Pro Monthly (₹100/month)';
+  const planLabel =
+    details.planType === 'enterprise'
+      ? 'Enterprise (organizer library)'
+      : details.planType === 'yearly'
+        ? 'Pro Yearly (₹1,000/year)'
+        : 'Pro Monthly (₹100/month)';
   const isScheduled = details.status === 'authenticated';
 
   const statusLine = isScheduled
@@ -313,6 +318,275 @@ export async function sendProWelcomeEmail(
         <p style="font-size: 14px; color: #444444; margin-bottom: 0;">Questions? Reply to this email or visit your account settings.</p>
       `,
       'You received this because your GetPGN Pro subscription was created or updated.',
+    ),
+  });
+}
+
+export type OrganizerCreditsEmailDetails = {
+  username: string;
+  scansAdded: number;
+  availableScans: number;
+  totalScansPurchased: number;
+  source: 'purchase' | 'admin';
+};
+
+/** Sent when prepaid scan credits are added to an organizer wallet. */
+export async function sendOrganizerCreditsAddedEmail(
+  email: string,
+  details: OrganizerCreditsEmailDetails,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const accountUrl = `${appUrl}/account`;
+  const sourceLabel =
+    details.source === 'admin' ? 'Support credit' : 'Prepaid purchase';
+
+  const text = [
+    `Hi ${details.username},`,
+    '',
+    `${details.scansAdded.toLocaleString()} scan credits were added to your GetPGN wallet.`,
+    '',
+    `Source: ${sourceLabel}`,
+    `Available now: ${details.availableScans.toLocaleString()} scans`,
+    `Lifetime purchased: ${details.totalScansPurchased.toLocaleString()} scans`,
+    '',
+    `View wallet: ${accountUrl}`,
+    '',
+    '— The GetPGN team',
+  ].join('\n');
+
+  return sendEmail({
+    to: email,
+    subject: `${details.scansAdded.toLocaleString()} scan credits added to your wallet`,
+    text,
+    html: emailShell(
+      'Scan credits added',
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(details.username)}</strong>,</p>
+        <p style="font-size: 14px; color: #444444;"><strong>${details.scansAdded.toLocaleString()}</strong> scan credits were added to your organizer wallet (${sourceLabel}).</p>
+        <ul style="font-size: 14px; color: #444444; padding-left: 20px; margin: 16px 0;">
+          <li style="margin-bottom: 6px;"><strong>Available now:</strong> ${details.availableScans.toLocaleString()} scans</li>
+          <li style="margin-bottom: 6px;"><strong>Lifetime purchased:</strong> ${details.totalScansPurchased.toLocaleString()} scans</li>
+        </ul>
+        ${ctaButton(accountUrl, 'View wallet & history')}
+      `,
+      'You received this because scan credits were added to your GetPGN organizer wallet.',
+    ),
+  });
+}
+
+export type OrganizerWalletHistoryEmailDetails = {
+  username: string;
+  scansUsed: number;
+  availableScans: number;
+  totalScansUsed: number;
+  totalScansPurchased: number;
+};
+
+/** Sent when a scan is consumed from the prepaid organizer wallet. */
+export async function sendOrganizerWalletHistoryEmail(
+  email: string,
+  details: OrganizerWalletHistoryEmailDetails,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const accountUrl = `${appUrl}/account`;
+
+  const text = [
+    `Hi ${details.username},`,
+    '',
+    '1 scan credit was used from your GetPGN prepaid wallet.',
+    '',
+    `Remaining: ${details.availableScans.toLocaleString()} scans`,
+    `Total used: ${details.totalScansUsed.toLocaleString()} of ${details.totalScansPurchased.toLocaleString()} purchased`,
+    '',
+    `Wallet history: ${accountUrl}`,
+    '',
+    '— The GetPGN team',
+  ].join('\n');
+
+  return sendEmail({
+    to: email,
+    subject: 'Wallet update: 1 scan credit used',
+    text,
+    html: emailShell(
+      'Wallet activity',
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(details.username)}</strong>,</p>
+        <p style="font-size: 14px; color: #444444;">1 scan credit was used from your prepaid wallet while digitizing a scoresheet.</p>
+        <ul style="font-size: 14px; color: #444444; padding-left: 20px; margin: 16px 0;">
+          <li style="margin-bottom: 6px;"><strong>Remaining:</strong> ${details.availableScans.toLocaleString()} scans</li>
+          <li style="margin-bottom: 6px;"><strong>Total used:</strong> ${details.totalScansUsed.toLocaleString()} of ${details.totalScansPurchased.toLocaleString()} purchased</li>
+        </ul>
+        ${ctaButton(accountUrl, 'View wallet history')}
+      `,
+      'You received this because a scan was charged to your GetPGN organizer wallet.',
+    ),
+  });
+}
+
+export type ProSubscriptionEmailDetails = {
+  username: string;
+  planType: 'monthly' | 'yearly' | 'enterprise';
+  event: 'renewed' | 'cancelled' | 'activated';
+  subscriptionEnd?: Date | string | null;
+};
+
+/** Pro subscription lifecycle updates (renewal, cancellation, activation). */
+export async function sendProSubscriptionEmail(
+  email: string,
+  details: ProSubscriptionEmailDetails,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const accountUrl = `${appUrl}/account`;
+  const planLabel =
+    details.planType === 'enterprise'
+      ? 'Enterprise'
+      : details.planType === 'yearly'
+        ? 'Pro Yearly'
+        : 'Pro Monthly';
+
+  const subject =
+    details.event === 'renewed'
+      ? 'Your GetPGN Pro subscription renewed'
+      : details.event === 'cancelled'
+        ? 'Your GetPGN Pro subscription was cancelled'
+        : 'Your GetPGN Pro subscription is active';
+
+  const headline =
+    details.event === 'renewed'
+      ? 'Pro subscription renewed'
+      : details.event === 'cancelled'
+        ? 'Pro subscription cancelled'
+        : 'Pro subscription active';
+
+  const bodyLines: string[] = [];
+  if (details.event === 'renewed') {
+    bodyLines.push(`Your ${planLabel} plan renewed successfully.`);
+    if (details.subscriptionEnd) {
+      bodyLines.push(`Next renewal: ${formatEmailDate(details.subscriptionEnd)}`);
+    }
+    bodyLines.push('Your Pro features remain available.');
+  } else if (details.event === 'cancelled') {
+    bodyLines.push(`Your ${planLabel} subscription is set to cancel.`);
+    if (details.subscriptionEnd) {
+      bodyLines.push(`Pro access continues until ${formatEmailDate(details.subscriptionEnd)}.`);
+    } else {
+      bodyLines.push('Pro access continues until the end of your current billing period.');
+    }
+  } else {
+    bodyLines.push(`Your ${planLabel} subscription is now active.`);
+    if (details.subscriptionEnd) {
+      bodyLines.push(`Renews on ${formatEmailDate(details.subscriptionEnd)}.`);
+    }
+  }
+
+  const text = [
+    `Hi ${details.username},`,
+    '',
+    ...bodyLines,
+    '',
+    `Manage billing: ${accountUrl}`,
+    '',
+    '— The GetPGN team',
+  ].join('\n');
+
+  const bodyHtml = bodyLines
+    .map((line) => `<li style="margin-bottom: 6px;">${line}</li>`)
+    .join('');
+
+  return sendEmail({
+    to: email,
+    subject,
+    text,
+    html: emailShell(
+      headline,
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(details.username)}</strong>,</p>
+        <ul style="font-size: 14px; color: #444444; padding-left: 20px; margin: 16px 0;">
+          ${bodyHtml}
+        </ul>
+        ${ctaButton(accountUrl, 'View account & billing')}
+      `,
+      'You received this because your GetPGN Pro subscription status changed.',
+    ),
+  });
+}
+
+/** Sent after a user changes their password while signed in. */
+export async function sendPasswordChangedEmail(
+  email: string,
+  username: string,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const accountUrl = `${appUrl}/account`;
+
+  const text = [
+    `Hi ${username},`,
+    '',
+    'Your GetPGN password was changed successfully.',
+    '',
+    'If you did not make this change, reset your password immediately or contact support.',
+    '',
+    `Account settings: ${accountUrl}`,
+    '',
+    '— The GetPGN team',
+  ].join('\n');
+
+  return sendEmail({
+    to: email,
+    subject: 'Your GetPGN password was changed',
+    text,
+    html: emailShell(
+      'Password changed',
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(username)}</strong>,</p>
+        <p style="font-size: 14px; color: #444444;">Your GetPGN account password was changed successfully.</p>
+        <p style="font-size: 14px; color: #444444;">If you did not make this change, reset your password immediately or contact support.</p>
+        ${ctaButton(accountUrl, 'Account settings')}
+      `,
+      'You received this because your GetPGN password was changed.',
+    ),
+  });
+}
+
+export type ReferrerFriendSignedUpDetails = {
+  referrerUsername: string;
+  refereeUsername: string;
+  rewardScans: number;
+};
+
+/** Sent when someone signs up using a referral link. */
+export async function sendReferrerFriendSignedUpEmail(
+  email: string,
+  details: ReferrerFriendSignedUpDetails,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const referralsUrl = `${appUrl}/account?tab=referrals`;
+
+  const text = [
+    `Hi ${details.referrerUsername},`,
+    '',
+    `@${details.refereeUsername} just signed up for GetPGN using your referral link.`,
+    '',
+    `When they complete their first scoresheet scan, you'll both receive ${details.rewardScans} bonus scans.`,
+    '',
+    `Track referrals: ${referralsUrl}`,
+    '',
+    '— The GetPGN team',
+  ].join('\n');
+
+  return sendEmail({
+    to: email,
+    subject: `@${details.refereeUsername} joined with your referral link`,
+    text,
+    html: emailShell(
+      'New referral signup',
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(details.referrerUsername)}</strong>,</p>
+        <p style="font-size: 14px; color: #444444;"><strong>@${escapeHtml(details.refereeUsername)}</strong> just signed up for GetPGN using your referral link.</p>
+        <p style="font-size: 14px; color: #444444;">When they complete their first scoresheet scan, you'll both receive <strong>${details.rewardScans} bonus scans</strong>.</p>
+        ${ctaButton(referralsUrl, 'View referrals')}
+      `,
+      'You received this because someone signed up with your GetPGN referral link.',
     ),
   });
 }

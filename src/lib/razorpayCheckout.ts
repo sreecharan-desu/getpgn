@@ -1,7 +1,8 @@
 import { friendlyError } from '@/lib/friendlyError';
 import { mapRazorpayPaymentFailure } from '@/lib/mapRazorpayPaymentFailure';
+import { PRICING_DISPLAY } from '@/lib/pricingDisplay';
 
-export type BillingPlan = "monthly" | "yearly";
+export type BillingPlan = "monthly" | "yearly" | "enterprise";
 
 export function formatBillingDate(value: string | Date): string {
   return new Date(value).toLocaleDateString("en-US", { dateStyle: "medium" });
@@ -88,7 +89,7 @@ export function consumePendingUpgrade(): BillingPlan | null {
   try {
     const plan = sessionStorage.getItem("getpgn:pending-upgrade");
     sessionStorage.removeItem("getpgn:pending-upgrade");
-    if (plan === "monthly" || plan === "yearly") return plan;
+    if (plan === "monthly" || plan === "yearly" || plan === "enterprise") return plan;
   } catch {
     /* ignore */
   }
@@ -150,12 +151,19 @@ export async function openRazorpayCheckout({
   const options = {
     key: data.keyId,
     subscription_id: data.subscription_id,
-    name: plan === "monthly" ? "GetPGN Pro Monthly" : "GetPGN Pro Yearly",
+    name:
+      plan === "monthly"
+        ? "GetPGN Pro Monthly"
+        : plan === "yearly"
+          ? "GetPGN Pro Yearly"
+          : "GetPGN Enterprise",
     description:
       deferredCheckout ??
       (plan === "monthly"
         ? "₹100/month · cancel anytime"
-        : "₹1,000/year · save 17%"),
+        : plan === "yearly"
+          ? "₹1,000/year · save 17%"
+          : `₹${PRICING_DISPLAY.enterprise.priceInr.toLocaleString('en-IN')}/year · ${PRICING_DISPLAY.enterprise.scanLimit.toLocaleString('en-IN')} scans · organizer library`),
     handler: async (response: {
       razorpay_payment_id: string;
       razorpay_subscription_id: string;

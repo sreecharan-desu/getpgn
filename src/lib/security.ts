@@ -3,9 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
 
+/** Strip whitespace and accidental wrapping quotes from pasted env values. */
+export function sanitizeEnv(value: string | undefined): string {
+  if (!value) return '';
+  let v = value.trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
 /** Fail fast when JWT_SECRET is missing or too weak. */
 export function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
+  const secret = sanitizeEnv(process.env.JWT_SECRET);
   if (!secret || secret.length < 32) {
     throw new Error(
       'JWT_SECRET is missing or too short (minimum 32 characters). Set it in your environment.',
@@ -15,11 +28,18 @@ export function getJwtSecret(): string {
 }
 
 /**
- * Dev-only routes (billing simulation, test pipeline).
- * Never enabled in production — local NODE_ENV=development only.
+ * Dev-only UI and routes (billing simulation, test pipeline).
+ * Disabled in production. Locally, set IS_DEV=false to hide even under npm run dev.
  */
+export function isDevFeaturesEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  const flag = sanitizeEnv(process.env.IS_DEV).toLowerCase();
+  if (flag === 'false' || flag === '0' || flag === 'no') return false;
+  return true;
+}
+
 export function isDevRouteAllowed(): boolean {
-  return process.env.NODE_ENV !== 'production';
+  return isDevFeaturesEnabled();
 }
 
 export function devRouteBlockedResponse(): NextResponse {

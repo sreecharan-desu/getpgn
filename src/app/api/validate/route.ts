@@ -8,6 +8,9 @@ import {
   rollbackScanReservation,
   type ScanReservation,
 } from '@/lib/scanLimits';
+import { notifyOrganizerWalletScanUsed } from '@/lib/notificationEmail';
+import { completeReferralOnFirstScan } from '@/lib/referrals';
+import { prisma } from '@/lib/db';
 import {
   createValidationSessionToken,
   verifyValidationSessionToken,
@@ -51,12 +54,52 @@ export async function POST(req: NextRequest) {
     }
 
     const result = validateChessMoves(moves);
+
+    if (reservation?.source === 'organizer_wallet') {
+      void notifyOrganizerWalletScanUsed(auth.user.id).catch((err) =>
+        console.error('[Validate API] Wallet notification failed:', err),
+      );
+    }
+
     reservation = null;
+
+    let scanCount: number | undefined;
+    let bonusScanCount: number | undefined;
+    let referralBonusApplied = false;
+    let referrerUsername: string | undefined;
+    let referralRewardScans: number | undefined;
+    if (scanConsumed) {
+      try {
+        const referralResult = await completeReferralOnFirstScan(auth.user.id);
+        if (referralResult.completed) {
+          referralBonusApplied = true;
+          referrerUsername = referralResult.referrerUsername;
+          referralRewardScans = referralResult.rewardScans;
+        }
+      } catch (err) {
+        console.warn('[Validate API] Referral completion failed:', err);
+      }
+      const freshQuota = await prisma.user.findUnique({
+        where: { id: auth.user.id },
+        select: { scanCount: true, bonusScanCount: true },
+      });
+      scanCount = freshQuota?.scanCount;
+      bonusScanCount = freshQuota?.bonusScanCount;
+    }
 
     return NextResponse.json({
       ...result,
       validationToken: createValidationSessionToken(auth.user.id),
       scanConsumed,
+      ...(scanConsumed
+        ? {
+            scanCount,
+            bonusScanCount,
+            ...(referralBonusApplied
+              ? { referralBonusApplied, referrerUsername, referralRewardScans }
+              : {}),
+          }
+        : {}),
     });
   } catch (error: unknown) {
     if (reservation) {

@@ -2,15 +2,24 @@ import React from "react";
 
 interface AvatarFrameProps {
   isPro?: boolean;
+  isEnterprise?: boolean;
   children: React.ReactNode;
   className?: string;
 }
 
-/** Pro members get a gradient ring + badge; free users render plain. */
-export function AvatarFrame({ isPro, children, className = "" }: AvatarFrameProps) {
+/** Pro / Enterprise members get a gradient ring + badge; free users render plain. */
+export function AvatarFrame({
+  isPro,
+  isEnterprise,
+  children,
+  className = "",
+}: AvatarFrameProps) {
   if (!isPro) {
     return <span className={`inline-flex shrink-0 ${className}`}>{children}</span>;
   }
+
+  const badge = isEnterprise ? "E" : "P";
+  const title = isEnterprise ? "GetPGN Enterprise" : "GetPGN Pro";
 
   return (
     <span className={`relative inline-flex shrink-0 ${className}`}>
@@ -22,9 +31,9 @@ export function AvatarFrame({ isPro, children, className = "" }: AvatarFrameProp
       </span>
       <span
         className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full border border-line-strong bg-ink text-paper shadow-[var(--shadow-soft)]"
-        title="GetPGN Pro"
+        title={title}
       >
-        <span className="text-[8px] font-bold leading-none">P</span>
+        <span className="text-[8px] font-bold leading-none">{badge}</span>
       </span>
     </span>
   );

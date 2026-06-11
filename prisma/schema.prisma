@@ -1,3 +1,7 @@
+// Schema policy: additive changes only — no data loss.
+// When editing: update schema-manifest.mjs + safe-additive-migration.sql, then npm run db:sync && npm run db:check
+// See docs/DATABASE_SCHEMA.md
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -10,6 +14,7 @@ generator client {
 enum Plan {
   FREE
   PAID
+  ENTERPRISE
 }
 
 model User {
@@ -22,6 +27,12 @@ model User {
   scanCount             Int         @default(0) // FREE only: lifetime scans consumed (max 2). Not Pro quota.
   monthlyScanCount      Int         @default(0) @map("monthly_scan_count") // PRO only: scans consumed this billing period
   monthlyScanMonth      String?     @map("monthly_scan_month") // PRO period key: YYYY-MM (monthly) or YYYY (yearly)
+  bonusScanCount        Int         @default(0) @map("bonus_scan_count") // Extra scans from referrals
+  referralCode          String?     @unique @map("referral_code")
+  referredById          String?     @map("referred_by_id")
+  avatarPiece           String      @default("queen") @map("avatar_piece")
+  userRole              String?     @map("user_role")
+  onboardingCompleted   Boolean     @default(false) @map("onboarding_completed")
   subscriptionExpiresAt DateTime?
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
@@ -37,7 +48,53 @@ model User {
   subscriptionEnd    DateTime? @map("subscription_end")
   paymentProvider    String?   @map("payment_provider")
 
+  referredBy         User?     @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredUsers      User[]    @relation("UserReferrals")
+  referralsMade      Referral[] @relation("Referrer")
+  referralReceived   Referral?  @relation("Referee")
+  organizerLibrary   OrganizerLibrary?
+  organizerAccount   OrganizerAccount?
+  organizerPurchases OrganizerPurchase[]
+
   @@index([subscriptionId])
+  @@index([referredById])
+}
+
+/** Prepaid scan wallet for tournament organizers (Razorpay Orders). */
+model OrganizerAccount {
+  id                  String   @id @default(uuid())
+  userId              String   @unique @map("user_id")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availableScans      Int      @default(0) @map("available_scans")
+  totalScansPurchased Int      @default(0) @map("total_scans_purchased")
+  totalScansUsed      Int      @default(0) @map("total_scans_used")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("organizer_accounts")
+}
+
+enum OrganizerPurchaseStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+/** One-time scan pack checkout via Razorpay Orders API. */
+model OrganizerPurchase {
+  id                String                  @id @default(uuid())
+  userId            String                  @map("user_id")
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scansPurchased    Int                     @map("scans_purchased")
+  amount            Int                     // INR whole rupees (scans × price per scan)
+  razorpayOrderId   String                  @unique @map("razorpay_order_id")
+  razorpayPaymentId String?                 @unique @map("razorpay_payment_id")
+  status            OrganizerPurchaseStatus @default(PENDING)
+  createdAt         DateTime                @default(now()) @map("created_at")
+  completedAt       DateTime?               @map("completed_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("organizer_purchases")
 }
 
 model PasswordResetToken {
@@ -67,16 +124,22 @@ model EmailVerificationToken {
 }
 
 model SavedGame {
-  id         String      @id @default(uuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title      String
-  pgn        String      @db.Text
-  movesJson  String      @db.Text // validated moves JSON string
-  createdAt  DateTime    @default(now())
-  publicLink PublicLink?
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  whitePlayer String      @default("") @map("white_player")
+  blackPlayer String      @default("") @map("black_player")
+  pgn         String      @db.Text
+  movesJson   String      @db.Text // validated moves JSON string
+  isDraft     Boolean     @default(false) @map("is_draft")
+  createdAt   DateTime    @default(now())
+  publicLink  PublicLink?
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, isDraft])
+  @@index([whitePlayer])
+  @@index([blackPlayer])
 }
 
 model PublicLink {
@@ -86,6 +149,37 @@ model PublicLink {
   slug      String    @unique // Unique short token for access control
   enabled   Boolean   @default(true)
   createdAt DateTime  @default(now())
+}
+
+/** Enterprise organizer public game library. */
+model OrganizerLibrary {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug      String   @unique
+  title     String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("organizer_libraries")
+}
+
+/** Tracks referral signup → first-scan reward lifecycle. */
+model Referral {
+  id               String    @id @default(uuid())
+  referrerId       String    @map("referrer_id")
+  refereeId        String    @unique @map("referee_id")
+  referrer         User      @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referee          User      @relation("Referee", fields: [refereeId], references: [id], onDelete: Cascade)
+  status           String    @default("pending") // pending | completed
+  referrerRewarded   Boolean   @default(false) @map("referrer_rewarded")
+  refereeRewarded    Boolean   @default(false) @map("referee_rewarded")
+  refereeBonusAcknowledgedAt DateTime? @map("referee_bonus_acknowledged_at")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([referrerId])
+  @@map("referrals")
 }
 
 model Feedback {

@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Check, Download, FileText, Share2, Save, ExternalLink, Lock } from 'lucide-react';
+import { parseMetadataFromPgn } from '@/lib/playerNames';
 
 interface ExportPanelProps {
   pgn: string;
   gameIsValid: boolean;
   isPaid: boolean;
   gameId: string | null;
+  /** Scan draft — share link works but game is not in library until saved. */
+  isDraftGame?: boolean;
   initialSharedSlug?: string | null;
-  onSave?: (title: string) => Promise<string | null>;
+  onSave?: (input: {
+    title: string;
+    whitePlayer: string;
+    blackPlayer: string;
+  }) => Promise<string | null>;
   onShare?: (gameId: string) => Promise<string | null>;
   /** Which sub-blocks to render. 'all' (default) shows both PGN output and Save & share. */
   section?: 'all' | 'pgn' | 'share';
@@ -15,6 +22,14 @@ interface ExportPanelProps {
   fillHeight?: boolean;
   /** Compact layout for mobile review workspace. */
   compact?: boolean;
+  /** Confirmed game with local move edits not yet written to library. */
+  hasUnsavedChanges?: boolean;
+  /** Stored title / player names (not PGN header fallbacks). */
+  saveMeta?: {
+    title: string;
+    whitePlayer: string;
+    blackPlayer: string;
+  };
 }
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({
@@ -22,12 +37,15 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   gameIsValid,
   isPaid,
   gameId,
+  isDraftGame = false,
   initialSharedSlug = null,
   onSave,
   onShare,
   section = 'all',
   fillHeight = false,
   compact = false,
+  hasUnsavedChanges = false,
+  saveMeta,
 }) => {
   const [copied, setCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -36,6 +54,8 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
+  const [whitePlayer, setWhitePlayer] = useState('');
+  const [blackPlayer, setBlackPlayer] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   useEffect(() => {
@@ -43,6 +63,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     setSharedSlug(initialSharedSlug);
     setIsEditingTitle(false);
   }, [gameId, initialSharedSlug]);
+
 
   const handleCopy = async () => {
     if (!pgn) return;
@@ -82,17 +103,36 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
 
   const startEditingTitle = () => {
     setCustomTitle(`Scanned Game - ${new Date().toLocaleDateString('en-CA')}`);
+    setWhitePlayer('');
+    setBlackPlayer('');
     setIsEditingTitle(true);
   };
 
   const handleSave = async () => {
-    if (!onSave || !customTitle.trim()) return;
+    if (!onSave || !customTitle.trim() || !whitePlayer.trim() || !blackPlayer.trim()) return;
     setSaving(true);
-    const id = await onSave(customTitle.trim());
+    const id = await onSave({
+      title: customTitle.trim(),
+      whitePlayer: whitePlayer.trim(),
+      blackPlayer: blackPlayer.trim(),
+    });
     if (id) {
       setSavedId(id);
       setIsEditingTitle(false);
     }
+    setSaving(false);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!onSave || !pgn) return;
+    const meta = saveMeta ?? parseMetadataFromPgn(pgn);
+    setSaving(true);
+    const id = await onSave({
+      title: meta.title,
+      whitePlayer: meta.whitePlayer,
+      blackPlayer: meta.blackPlayer,
+    });
+    if (id) setSavedId(id);
     setSaving(false);
   };
 
@@ -105,6 +145,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   };
 
   const shareUrl = sharedSlug ? `${window.location.origin}/share/${sharedSlug}` : '';
+  const isLibrarySaved = Boolean(savedId) && !isDraftGame;
 
   const formatPgnMoves = (rawPgn: string): string => {
     if (!rawPgn) return '';
@@ -134,9 +175,9 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
 
   return (
     <div
-      className={`card text-ink ${compact ? 'p-3.5' : 'p-5'} ${
-        fillHeight && section === 'pgn' ? 'flex h-full min-h-0 flex-col' : ''
-      }`}
+      className={`card text-ink ${
+        compact || fillHeight ? "p-3.5" : "p-5"
+      } ${fillHeight && section === "pgn" ? "flex h-full min-h-0 flex-col" : ""}`}
     >
       <div
         className={`flex flex-col gap-4 ${
@@ -231,9 +272,15 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-positive opacity-60" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-positive" />
                   </span>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-ink">Shareable link is live</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-ink">
+                    {isDraftGame ? "Temporary share link" : "Shareable link is live"}
+                  </span>
                 </div>
-                <p className="text-[12px] leading-snug text-muted">Anyone with this link can view the interactive replay.</p>
+                <p className="text-[12px] leading-snug text-muted">
+                  {isDraftGame
+                    ? "Anyone with this link can replay while you review. Save to your library to keep the link."
+                    : "Anyone with this link can view the interactive replay."}
+                </p>
                 <input
                   type="text"
                   readOnly
@@ -258,7 +305,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
               </div>
             )}
 
-            {!savedId ? (
+            {!isLibrarySaved ? (
               !isEditingTitle ? (
                 <div className="space-y-1.5">
                   <button onClick={startEditingTitle} disabled={saving || !pgn} className="btn-secondary btn-md w-full">
@@ -272,6 +319,25 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2.5 rounded-[12px] border border-line bg-surface p-3.5">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">Players</span>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      value={whitePlayer}
+                      onChange={(e) => setWhitePlayer(e.target.value)}
+                      className="input"
+                      placeholder="White player name"
+                      aria-label="White player name"
+                    />
+                    <input
+                      type="text"
+                      value={blackPlayer}
+                      onChange={(e) => setBlackPlayer(e.target.value)}
+                      className="input"
+                      placeholder="Black player name"
+                      aria-label="Black player name"
+                    />
+                  </div>
                   <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">Game title</span>
                   <input
                     type="text"
@@ -279,10 +345,15 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                     onChange={(e) => setCustomTitle(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                     className="input"
-                    placeholder="e.g. Round 1 vs Magnus"
+                    placeholder="e.g. Round 1 — City Open"
                   />
                   <div className="flex gap-2">
-                    <button onClick={handleSave} disabled={saving || !customTitle.trim()} aria-busy={saving || undefined} className="btn-primary btn-sm flex-1">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !customTitle.trim() || !whitePlayer.trim() || !blackPlayer.trim()}
+                      aria-busy={saving || undefined}
+                      className="btn-primary btn-sm flex-1"
+                    >
                       {saving ? 'Saving…' : 'Confirm save'}
                     </button>
                     <button onClick={() => setIsEditingTitle(false)} disabled={saving} className="btn-secondary btn-sm">
@@ -292,11 +363,23 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                 </div>
               )
             ) : (
-              !sharedSlug && (
-                <button onClick={handleShare} disabled={sharing} aria-busy={sharing || undefined} className="btn-secondary btn-md w-full">
-                  <Share2 className="h-3.5 w-3.5" /> {sharing ? 'Generating link…' : 'Generate shareable link'}
-                </button>
-              )
+              <div className="space-y-2">
+                {hasUnsavedChanges ? (
+                  <button
+                    onClick={() => void handleSaveChanges()}
+                    disabled={saving || !pgn}
+                    aria-busy={saving || undefined}
+                    className="btn-primary btn-md w-full"
+                  >
+                    {saving ? "Saving…" : "Save changes to library"}
+                  </button>
+                ) : null}
+                {!sharedSlug ? (
+                  <button onClick={handleShare} disabled={sharing} aria-busy={sharing || undefined} className="btn-secondary btn-md w-full">
+                    <Share2 className="h-3.5 w-3.5" /> {sharing ? 'Generating link…' : 'Generate shareable link'}
+                  </button>
+                ) : null}
+              </div>
             )}
           </div>
         )}

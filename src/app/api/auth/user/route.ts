@@ -38,6 +38,7 @@ export async function GET() {
         plan: user.plan,
         emailVerified: user.emailVerified,
         scanCount: user.scanCount,
+        bonusScanCount: user.bonusScanCount,
         monthlyScanCount: user.monthlyScanCount,
         monthlyScanMonth: user.monthlyScanMonth,
         subscriptionExpiresAt: user.subscriptionExpiresAt,

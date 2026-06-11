@@ -14,7 +14,7 @@ export const PRO_PREMIUM_FEATURES = [
 
 export const PRICING_HEADLINE = "Simple, transparent pricing";
 export const PRICING_SUBLINE =
-  "Choose a plan that works for you. No hidden fees — cancel Pro anytime.";
+  "Free includes 2 lifetime scans. Pro from ₹100/month, or Enterprise pay-as-you-go packs from ₹4,000 — no hidden fees.";
 
 export const RAZORPAY_FOOTER_LINE =
   "Pay with credit card or PhonePe · Secure Razorpay checkout · Cancel anytime";
@@ -32,12 +32,3 @@ export const PRICING_CARD_MODAL_BASE =
 export const PRICING_CARD_MODAL_HIGHLIGHT =
   "pricing-card pricing-card--featured pricing-card--modal pricing-card-layout relative flex h-full w-full min-w-[min(82vw,300px)] flex-shrink-0 snap-center flex-col p-6 sm:p-8 md:min-w-0";
 
-export function getFreeFeatures(scanLimit: number) {
-  return [
-    `${scanLimit} scoresheet scans`,
-    "AI move extraction",
-    "Live board validation",
-    "PGN copy & download",
-    "Inline move editing",
-  ] as const;
-}

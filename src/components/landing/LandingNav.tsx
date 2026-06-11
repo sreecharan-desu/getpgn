@@ -21,7 +21,7 @@ export function LandingNav() {
           <Link
             href="/signup"
             prefetch
-            className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-ink pl-4 pr-3.5 text-[13px] font-medium tracking-[-0.01em] text-paper shadow-[var(--shadow-soft)] transition-all hover:bg-ink-soft active:scale-[0.98]"
+            className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-ink pl-4 pr-3.5 text-[13px] font-medium tracking-[-0.01em] text-paper transition-all hover:bg-ink-soft active:scale-[0.98]"
           >
             Get started
             <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
