@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSession } from '@/lib/session';
 import { consumeVerificationToken, findVerificationToken } from '@/lib/userVerificationDb';
+import { queueWelcomeEmail } from '@/lib/welcomeEmail';
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +41,10 @@ export async function POST(req: NextRequest) {
 
     await consumeVerificationToken(verificationToken.id, verificationToken.userId);
     await createSession(verificationToken.userId, verificationToken.username);
+
+    if (verificationToken.email) {
+      queueWelcomeEmail(verificationToken.email, verificationToken.username);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -13,6 +13,7 @@ import {
   type BillingPlanType,
 } from '@/lib/razorpaySubscriptions';
 import { buildProActivationScanFields } from '@/lib/scanLimits';
+import { queueProWelcomeEmail } from '@/lib/welcomeEmail';
 
 export async function POST(req: NextRequest) {
   const limited = rateLimitByIp(req, 'subscription-verify', 10, 60_000);
@@ -155,6 +156,16 @@ export async function POST(req: NextRequest) {
         ? `[Verify Subscription] User ${user.username} scheduled Pro (${planType}). First charge: ${subscriptionStart.toISOString()}`
         : `[Verify Subscription] User ${user.username} upgraded to Pro (${planType}). Expires: ${expiryDate.toISOString()}`,
     );
+
+    if (user.email && !existingPayment) {
+      queueProWelcomeEmail(user.email, {
+        username: user.username,
+        planType,
+        status: deferred ? 'authenticated' : 'active',
+        subscriptionStart: deferred ? subscriptionStart : undefined,
+        subscriptionEnd: updatedUser.subscriptionEnd,
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -116,6 +116,7 @@ export type VerificationTokenRow = {
   used: boolean;
   expiresAt: Date;
   username: string;
+  email: string | null;
   emailVerified: boolean;
 };
 
@@ -128,6 +129,7 @@ export async function findVerificationToken(token: string): Promise<Verification
         used: boolean;
         expires_at: Date;
         username: string;
+        email: string | null;
         email_verified: boolean;
       }[]
     >`
@@ -137,6 +139,7 @@ export async function findVerificationToken(token: string): Promise<Verification
         evt.used,
         evt.expires_at,
         u.username,
+        u.email,
         u.email_verified
       FROM email_verification_tokens evt
       INNER JOIN "User" u ON u.id = evt.user_id
@@ -153,6 +156,7 @@ export async function findVerificationToken(token: string): Promise<Verification
       used: row.used,
       expiresAt: row.expires_at,
       username: row.username,
+      email: row.email,
       emailVerified: row.email_verified,
     };
   } catch {

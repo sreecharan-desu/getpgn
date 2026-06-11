@@ -169,3 +169,150 @@ export async function sendVerificationEmail(
       `,
   });
 }
+
+function formatEmailDate(value: Date | string): string {
+  return new Date(value).toLocaleDateString('en-IN', { dateStyle: 'long' });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const emailShell = (title: string, bodyHtml: string, footer: string) => `
+  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px; background-color: #ffffff; color: #111111;">
+    <h2 style="color: #000000; margin-top: 0; font-weight: 800; letter-spacing: -0.025em;">${title}</h2>
+    ${bodyHtml}
+    <hr style="border: 0; border-top: 1px solid #eaeaea; margin: 24px 0;" />
+    <p style="color: #999999; font-size: 11px; margin-bottom: 0;">${footer}</p>
+  </div>
+`;
+
+const ctaButton = (href: string, label: string) => `
+  <div style="margin: 24px 0;">
+    <a href="${href}" style="background-color: #000000; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px;">${label}</a>
+  </div>
+`;
+
+/** Sent after a user verifies their email address. */
+export async function sendWelcomeEmail(
+  email: string,
+  username: string,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const dashboardUrl = `${appUrl}/dashboard`;
+
+  const text = [
+    `Hi ${username},`,
+    '',
+    'Welcome to GetPGN — the chess scoresheet digitizer.',
+    '',
+    'You can scan paper scoresheets, validate moves, export PGN, and (with Pro) save games and share interactive replays.',
+    '',
+    `Open your dashboard: ${dashboardUrl}`,
+    '',
+    'Happy scanning!',
+    '— The GetPGN team',
+  ].join('\n');
+
+  return sendEmail({
+    to: email,
+    subject: 'Welcome to GetPGN',
+    text,
+    html: emailShell(
+      'Welcome to GetPGN',
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(username)}</strong>,</p>
+        <p style="font-size: 14px; color: #444444;">Thanks for joining GetPGN. You can scan paper scoresheets, validate moves, export PGN, and build your game library from the dashboard.</p>
+        ${ctaButton(dashboardUrl, 'Go to dashboard')}
+        <p style="font-size: 14px; color: #444444; margin-bottom: 0;">Happy scanning!</p>
+      `,
+      'You received this because you verified your GetPGN account.',
+    ),
+  });
+}
+
+export type ProWelcomeEmailDetails = {
+  username: string;
+  planType: 'monthly' | 'yearly';
+  status: 'active' | 'authenticated';
+  subscriptionEnd?: Date | string | null;
+  subscriptionStart?: Date | string | null;
+};
+
+/** Sent when a user subscribes or schedules GetPGN Pro. */
+export async function sendProWelcomeEmail(
+  email: string,
+  details: ProWelcomeEmailDetails,
+): Promise<SendResult> {
+  const appUrl = getAppUrl();
+  const dashboardUrl = `${appUrl}/dashboard`;
+  const planLabel = details.planType === 'yearly' ? 'Pro Yearly (₹1,000/year)' : 'Pro Monthly (₹100/month)';
+  const isScheduled = details.status === 'authenticated';
+
+  const statusLine = isScheduled
+    ? 'Scheduled — autopay is set up'
+    : 'Active';
+
+  const billingLines: string[] = [];
+  if (isScheduled && details.subscriptionStart) {
+    billingLines.push(
+      `First plan payment (auto-debit): ${formatEmailDate(details.subscriptionStart)}`,
+    );
+  }
+  if (details.subscriptionEnd) {
+    billingLines.push(
+      isScheduled
+        ? `Pro access until: ${formatEmailDate(details.subscriptionEnd)}`
+        : `Renews on: ${formatEmailDate(details.subscriptionEnd)}`,
+    );
+  }
+  if (!isScheduled) {
+    billingLines.push('Your Pro features are available now.');
+  } else {
+    billingLines.push(
+      'Today’s checkout only registers your ₹1 mandate — your plan amount is not charged until the date above.',
+    );
+  }
+
+  const text = [
+    `Hi ${details.username},`,
+    '',
+    'Welcome to GetPGN Pro!',
+    '',
+    `Plan: ${planLabel}`,
+    `Status: ${statusLine}`,
+    ...billingLines,
+    '',
+    `Manage billing: ${dashboardUrl}`,
+    '',
+    '— The GetPGN team',
+  ].join('\n');
+
+  const billingHtml = billingLines
+    .map((line) => `<li style="margin-bottom: 6px;">${line}</li>`)
+    .join('');
+
+  return sendEmail({
+    to: email,
+    subject: 'Welcome to GetPGN Pro',
+    text,
+    html: emailShell(
+      'Welcome to GetPGN Pro',
+      `
+        <p style="font-size: 14px; color: #444444;">Hi <strong>${escapeHtml(details.username)}</strong>,</p>
+        <p style="font-size: 14px; color: #444444;">You’re on <strong>${planLabel}</strong>. Here’s your subscription status:</p>
+        <ul style="font-size: 14px; color: #444444; padding-left: 20px; margin: 16px 0;">
+          <li style="margin-bottom: 6px;"><strong>Status:</strong> ${statusLine}</li>
+          ${billingHtml}
+        </ul>
+        ${ctaButton(dashboardUrl, 'View account & billing')}
+        <p style="font-size: 14px; color: #444444; margin-bottom: 0;">Questions? Reply to this email or visit your account settings.</p>
+      `,
+      'You received this because your GetPGN Pro subscription was created or updated.',
+    ),
+  });
+}
