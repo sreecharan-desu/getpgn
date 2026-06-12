@@ -31,7 +31,7 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+# .env*
 
 # vercel
 .vercel
@@ -50,4 +50,4 @@ __pycache__/
 scratch/
 
 # local resources/images
-notamate-essentials/
+# notamate-essentials/
