@@ -1,118 +1,34 @@
-# GetPGN
+# getpgn
 
-**Live:** [getpgn.in](https://getpgn.in) · **Repo:** [github.com/azeezchess/getpgn](https://github.com/azeezchess/getpgn) · **Maintainer:** [@azeezchess](https://github.com/azeezchess)
+turns photos of handwritten chess scoresheets into pgn.
 
-GetPGN is a state-of-the-art AI-powered chess scoresheet digitizer. It allows players, arbiters, and organizers to instantly convert handwritten chess scoresheets (in photos or scans) into standard PGN (Portable Game Notation) files. 
+live: [getpgn.in](https://getpgn.in) · maintainer: [@azeezchess](https://github.com/azeezchess)
 
-Powered by Next.js 15, Prisma, python-chess validation, and advanced Gemini Multimodal models, GetPGN offers a seamless, modern, light-themed web interface for uploading, validating, playing through, and sharing chess games.
+## features
 
-## Features
+- extracts move lists from scoresheet photos or scans with a multimodal model
+- validates moves with `python-chess` and generates fen
+- interactive board to play through the game (chessground + `chess.js`)
+- public share links for games
+- saved games dashboard with title search
+- premium tier through razorpay subscriptions
 
-- **AI Digitization**: Instantly extracts move-lists from handwritten scoresheets using advanced multimodal models.
-- **Move Validation**: Integrates logic (using custom python scripts) to validate legality of chess moves, track positions, and generate clean FEN notations.
-- **Interactive Chessboard**: View and play through your digitized chess game side-by-side using Chessground and `chess.js`.
-- **Easy Sharing**: Generate unique, public shareable links for your games so you can showcase them.
-- **Game History & Search**: Save all your processed games to a personal dashboard with title searches.
-- **Premium Subscription**: Premium tier powered by Razorpay subscriptions for unlimited scoresheet scans.
+## stack
 
-## Tech Stack
+next.js 15 · react 19 · prisma + postgres · gemini · python-chess · resend · razorpay · tailwind css
 
-- **Frontend**: Next.js 15 (App Router), React 19, TailwindCSS, Chessground, Lucide Icons
-- **Backend / DB**: Next.js Server Actions & API Routes, PostgreSQL, Prisma ORM
-- **AI Integration**: Google GenAI SDK (Gemini 2.5 Flash / Gemini 2.0)
-- **Email Service**: Resend (auth emails, forgot-password, magic links)
-- **Payments**: Razorpay Subscriptions (Standard Monthly & Yearly)
-- **Verification Engine**: Python 3 backend runner with `python-chess` for game legality validation.
+## run locally
 
----
+needs node 18+, python 3.10+ and postgres.
 
-## Getting Started
+```bash
+npm install
+npm run setup:python      # python venv + python-chess
+cp .env.example .env
+npm run db:sync           # prisma generate + db push
+npm run dev
+```
 
-### Prerequisites
+## env
 
-1. **Node.js**: v18.x or higher
-2. **Python**: v3.10+ (needed for executing move validation scripts)
-3. **PostgreSQL**: Local database instance or a managed service (e.g. Neon)
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/sreecharan-desu/getpgn.git
-   cd getpgn
-   ```
-
-2. Install Node.js dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Set up the Python virtual environment and dependencies:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate # On Windows: venv\Scripts\activate
-   pip install python-chess
-   ```
-
-4. Environment Setup:
-   Copy the example environment file and configure the variables:
-   ```bash
-   cp .env.example .env
-   ```
-
-   Fill in the required keys:
-   - `DATABASE_URL`: Your PostgreSQL connection string.
-   - `AI_API_KEY`: Your Google Gemini API Key.
-   - `JWT_SECRET`: Random hash for JWT authentication.
-   - `RESEND_API_KEY`: API Key from Resend.
-   - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Matching Test or Live keys from Razorpay.
-   - `RAZORPAY_MONTHLY_PLAN_ID` / `RAZORPAY_YEARLY_PLAN_ID`: Subscription **plan** IDs (must have `period` + `interval` — see below).
-   - `RAZORPAY_WEBHOOK_SECRET`: Webhook signing secret for subscription events.
-   - Razorpay webhook URL (production): `https://getpgn.com/api/webhooks/razorpay`
-   - Enable webhook events: `subscription.*`, `refund.created`, `refund.processed` (refunds revoke Pro immediately).
-
-   **Razorpay plans (required):** Plans must be created as recurring subscription plans with billing cycle:
-   - Monthly: `period=monthly`, `interval=1`, amount `10000` paise (₹100)
-   - Yearly: `period=yearly`, `interval=1`, amount `100000` paise (₹1,000)
-
-   Create them via Dashboard (**Subscriptions → Plans**) or run:
-
-   ```bash
-   node --env-file=.env scripts/razorpay-setup-plans.mjs
-   ```
-
-   Then set the printed plan IDs in env. Subscriptions are created by the API with `total_count` and `expire_by` per [Razorpay docs](https://razorpay.com/docs/api/payments/subscriptions/create-subscription/).
-
-5. Initialize Database:
-   ```bash
-   npx prisma db push
-   npx prisma generate
-   ```
-
-6. Start Development Server:
-   ```bash
-   npm run dev
-   ```
-
-   Visit `http://localhost:3000` to access the application.
-
----
-
-## Deployment to Vercel
-
-This application is fully compatible and optimized for Vercel deployment. 
-
-### Vercel Build Setup
-
-1. **Python Dependency**: The validation engine uses Python. Vercel automatically supports running Python scripts if Python is requested, but for serverless routes invoking Python, we run it as a subprocess. Ensure you do not depend on system binary packages that require complex compilation.
-2. **Environment Variables**: Make sure to add all environment variables listed in your `.env` to the Vercel Project Dashboard.
-3. **Database Migration**: Ensure the database schema is updated before deployment or run `npx prisma db push` as part of your Vercel build command:
-   ```bash
-   npx prisma generate && next build
-   ```
-
----
-
-## License
-
-Personal project of [Sreecharan Desu](https://github.com/sreecharan-desu).
+copy `.env.example` to `.env`.
