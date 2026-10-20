@@ -1,0 +1,7 @@
+date: 2026-10-20T15:03:36+00:00
+cpu: 8 x Intel(R) Xeon(R) Processor
+ram_mb: 16002
+Linux 6.12.94+
+node v22.23.3, tsx v4.23.15 (npx tsx@4)
+commands: npx tsx benchmarks/validator-bench.mjs 200 ; npx tsx scripts/benchmark-scoresheets.mjs
+input: stored imagePgn fixtures in src/lib/scoresheetBenchmark.ts (no gemini call, no network)

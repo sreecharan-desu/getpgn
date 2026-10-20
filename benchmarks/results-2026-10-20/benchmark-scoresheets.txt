@@ -1,0 +1,40 @@
+Scoresheet benchmark — validation recovery
+
+[chess-validator] valid=40 illegal=0 ambiguous=1 missing=1 recovered=1 gameValid=false
+5Neo-1: similarity 97.6% | valid 40 amb 1 ill 0
+  ply 13: OCR "Nd2" → "Nfd2" (want "Nd2")
+
+[chess-validator] valid=53 illegal=1 ambiguous=1 missing=1 recovered=2 gameValid=false
+77YJ-1: similarity 90.9% | valid 53 amb 1 ill 1
+  ply 32: OCR "Qd6" → "Qd6" (want "Qa6")
+  ply 34: OCR "Nd5" → "Nd5" (want "Na5")
+  ply 39: OCR "Nxd7" → "Nxd7+" (want "Nxd7")
+  ply 47: OCR "Rc1" → "Rac1" (want "Rc1")
+  ply 51: OCR "Qd6+" → "Qd3" (want "Qd6+")
+
+[chess-validator] valid=56 illegal=1 ambiguous=1 missing=0 recovered=2 gameValid=false
+Littleboy-1: similarity 94.8% | valid 56 amb 1 ill 1
+  ply 24: OCR "Ncxe5" → "Ncxe5" (want "Ncxd5")
+  ply 34: OCR "Rc8" → "Rac8" (want "Rc8")
+  ply 38: OCR "Bd2" → "Bd7" (want "Bd2")
+
+[chess-validator] valid=60 illegal=0 ambiguous=0 missing=0 recovered=0 gameValid=true
+Max1a-1: similarity 95.0% | valid 60 amb 0 ill 0
+  ply 23: OCR "Be4" → "Bxe4" (want "Be4")
+  ply 24: OCR "Bh3" → "Bh3" (want "Bb3")
+  ply 41: OCR "Bxa6" → "Bxa6" (want "Ba6")
+
+[chess-validator] valid=100 illegal=0 ambiguous=0 missing=0 recovered=0 gameValid=true
+MopntA-1: similarity 90.0% | valid 100 amb 0 ill 0
+  ply 22: OCR "Rc8" → "Rc8" (want "Re8")
+  ply 32: OCR "Nh5" → "Nh5" (want "Na5")
+  ply 34: OCR "Ne5" → "Ne5" (want "Ne7")
+  ply 35: OCR "Nxe5" → "Nxe5" (want "Nxe8")
+  ply 36: OCR "Bxe5" → "Bxe5" (want "Bxe8")
+  ply 53: OCR "Bd4" → "Bd4" (want "Bh4")
+  ply 54: OCR "dxe4" → "dxe4" (want "Nce7")
+  ply 56: OCR "Red8" → "Red8" (want "Re8")
+  ply 68: OCR "R8xd6" → "R8xd6" (want "Re4")
+  ply 98: OCR "Rxg5" → "Rxg5" (want "Rxg5+")
+
+Average similarity: 93.7% across 5 games
