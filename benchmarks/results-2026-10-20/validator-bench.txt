@@ -1,0 +1,14 @@
+date: 2026-10-20T15:03:04.115Z
+cpu: 8 x Intel(R) Xeon(R) Processor
+ram_mb: 16002
+os: Linux 6.12.94+ · node v22.23.3
+iterations per sheet: 200
+
+sheet | plies | raw vs truth | validated vs truth | p50 ms | p95 ms
+5Neo-1 | 41 | 100.0% | 97.6% | 9.78 | 11.08
+77YJ-1 | 55 | 96.4% | 90.9% | 19.32 | 21.07
+Littleboy-1 | 58 | 98.3% | 94.8% | 21.47 | 27.47
+Max1a-1 | 60 | 96.7% | 95.0% | 12.70 | 14.97
+MopntA-1 | 100 | 89.0% | 90.0% | 37.81 | 45.56
+
+average | | 96.1% | 93.7% | 18.70 | 39.76
