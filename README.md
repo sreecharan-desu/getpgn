@@ -47,3 +47,7 @@ offline run of the move validator on the 5 hand-scored scoresheets in `public/` 
 | average | | 96.1% | 93.7% | 18.7 ms | 39.8 ms |
 
 similarity is per-ply agreement with the hand-scored game, latency is 200 runs per sheet. on 4 of 5 sheets validation moved the output further from the hand-scored notation, partly by adding disambiguation or check marks (`Nd2` → `Nfd2`, `Nxd7` → `Nxd7+`). five games is a small sample; these are not accuracy numbers for real uploads.
+
+---
+
+built by [sreecharan desu](https://www.sreecharandesu.in) · [more projects](https://www.sreecharandesu.in/work)
