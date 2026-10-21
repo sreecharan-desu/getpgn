@@ -731,7 +731,7 @@ export default function DashboardClient({
     const upgrade = searchParams.get("upgrade");
     if (!upgrade || upgrade === "free") return;
     if (upgrade === "monthly" || upgrade === "yearly" || upgrade === "enterprise") {
-      setPricingInitialInterval(upgrade);
+      setPricingInitialInterval("monthly");
       setShowPricingModal(true);
       router.replace("/dashboard", { scroll: false });
     }

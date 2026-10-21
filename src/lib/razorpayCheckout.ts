@@ -89,7 +89,7 @@ export function consumePendingUpgrade(): BillingPlan | null {
   try {
     const plan = sessionStorage.getItem("getpgn:pending-upgrade");
     sessionStorage.removeItem("getpgn:pending-upgrade");
-    if (plan === "monthly" || plan === "yearly" || plan === "enterprise") return plan;
+    if (plan === "monthly") return plan;
   } catch {
     /* ignore */
   }
