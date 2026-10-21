@@ -19,10 +19,6 @@ import {
 } from "./sharedPricing";
 import { FREE_SCAN_LIMIT } from "@/components/dashboard/FreePlanUI";
 import { PRICING_DISPLAY, formatInr } from "@/lib/pricingDisplay";
-import {
-  ORGANIZER_MIN_SCANS,
-  formatOrganizerInr,
-} from "@/lib/organizerPricing";
 
 export interface PricingSectionContentProps {
   presentation?: "section" | "modal";
@@ -40,11 +36,8 @@ export function PricingSectionContent({
   checkoutMode = false,
   billingLoading = false,
   onCheckoutMonthly,
-  onCheckoutYearly,
-  onCheckoutEnterprise,
 }: PricingSectionContentProps) {
-  const { monthly, yearly } = PRICING_DISPLAY;
-  const organizerMinInr = ORGANIZER_MIN_SCANS;
+  const { monthly } = PRICING_DISPLAY;
   const showFreePlan = !checkoutMode;
 
   const isModal = presentation === "modal";
@@ -71,10 +64,10 @@ export function PricingSectionContent({
   const cardHighlight = isModal ? PRICING_CARD_MODAL_HIGHLIGHT : PRICING_CARD_HIGHLIGHT;
   const gridClass = isModal
     ? showFreePlan
-      ? "-mx-1 mt-6 items-stretch pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0 xl:grid-cols-4"
-      : "-mx-1 mx-auto mt-6 w-full max-w-5xl items-stretch gap-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:pb-0"
-    : `-mx-1 mx-auto mt-10 w-full max-w-6xl items-stretch gap-5 pb-2 sm:mt-12 lg:grid lg:items-stretch lg:gap-5 lg:overflow-visible lg:pb-0 ${
-        showFreePlan ? "lg:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-3"
+      ? "-mx-1 mx-auto mt-6 w-full max-w-3xl items-stretch pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0"
+      : "-mx-1 mx-auto mt-6 w-full max-w-md items-stretch gap-4 pb-2 md:mx-0 md:grid md:grid-cols-1 md:overflow-visible md:pb-0"
+    : `-mx-1 mx-auto mt-10 w-full max-w-3xl items-stretch gap-5 pb-2 sm:mt-12 lg:grid lg:items-stretch lg:gap-5 lg:overflow-visible lg:pb-0 ${
+        showFreePlan ? "lg:grid-cols-2" : "lg:grid-cols-1"
       }`;
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -188,49 +181,6 @@ export function PricingSectionContent({
     </Link>
   );
 
-  const proYearlyCta = checkoutMode ? (
-    <button
-      type="button"
-      disabled={billingLoading}
-      aria-busy={billingLoading || undefined}
-      onClick={onCheckoutYearly}
-      className={ctaClass("primary", billingLoading)}
-    >
-      {billingLoading ? (
-        <>
-          <Spinner size={15} />
-          Opening Razorpay…
-        </>
-      ) : (
-        "Get started"
-      )}
-    </button>
-  ) : (
-    <Link
-      href="/signup"
-      prefetch
-      onClick={() => storePendingUpgrade("yearly")}
-      className={ctaClass("primary")}
-    >
-      Get started
-    </Link>
-  );
-
-  const enterpriseCta = checkoutMode ? (
-    <button
-      type="button"
-      disabled={billingLoading}
-      onClick={onCheckoutEnterprise}
-      className={ctaClass("primary", billingLoading)}
-    >
-      Buy Enterprise pack
-    </button>
-  ) : (
-    <Link href="/organizer" prefetch className={ctaClass("primary")}>
-      Buy Enterprise pack
-    </Link>
-  );
-
   const freeCta = (
     <Link href="/signup" prefetch className={ctaClass("secondary")}>
       Start free
@@ -242,21 +192,6 @@ export function PricingSectionContent({
     "Move validation & session PGN export",
     "No cloud library or share links",
   ] as const;
-
-  const enterpriseFeatures = [
-    `${ORGANIZER_MIN_SCANS.toLocaleString("en-IN")}+ scans · add anytime`,
-    "Public tournament game library",
-    "Shareable library link for viewers",
-    "Pro features while credits are available",
-  ] as const;
-
-  const enterpriseBadge = (
-    <span className="pricing-card__badge">Recommended for organizers</span>
-  );
-
-  const yearlyBadge = (
-    <span className="pricing-card__badge pricing-card__badge--subtle">Best value</span>
-  );
 
   const featureList = (
     items: readonly string[],
@@ -356,7 +291,7 @@ export function PricingSectionContent({
               })
             : null}
 
-          {renderCardShell(cardBase, {
+          {renderCardShell(cardHighlight, {
             title: "Pro · Monthly",
             tagline: "For players who digitize every week",
             price: priceBlock(formatInr(monthly.priceInr), "/ month"),
@@ -365,29 +300,6 @@ export function PricingSectionContent({
             features: <ProFeatureList compact={false} />,
           })}
 
-          {renderCardShell(cardHighlight, {
-            badge: enterpriseBadge,
-            badgeVariant: "featured",
-            title: "Enterprise",
-            tagline: "Pay-as-you-go for tournaments & clubs",
-            price: priceBlock(formatOrganizerInr(organizerMinInr), "", {
-              prefix: "From",
-            }),
-            subtext: "One-time scan packs · no subscription",
-            cta: enterpriseCta,
-            features: featureList(enterpriseFeatures),
-          })}
-
-          {renderCardShell(cardBase, {
-            badge: yearlyBadge,
-            badgeVariant: "subtle",
-            title: "Pro · Yearly",
-            tagline: "For serious tournament players",
-            price: priceBlock(formatInr(yearly.priceInr), "/ year"),
-            subtext: `${formatInr(Math.round(yearly.priceInr / 12))}/month · save vs monthly`,
-            cta: proYearlyCta,
-            features: <ProFeatureList compact={false} />,
-          })}
         </div>
       </div>
 

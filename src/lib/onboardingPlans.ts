@@ -1,10 +1,5 @@
 import { getRecommendedPlan, type UserRole } from '@/lib/userRoles';
 import { PRICING_DISPLAY, formatInr } from '@/lib/pricingDisplay';
-import {
-  ORGANIZER_MIN_SCANS,
-  ORGANIZER_PRICE_PER_SCAN_INR,
-  formatOrganizerInr,
-} from '@/lib/organizerPricing';
 
 export const ONBOARDING_PLAN_IDS = ['free', 'monthly', 'yearly', 'organizer'] as const;
 
@@ -16,13 +11,11 @@ export function isOnboardingPlanId(value: string): value is OnboardingPlanId {
 
 /** Suggested plan from onboarding role — enterprise maps to organizer checkout. */
 export function defaultPlanForRole(role: UserRole): OnboardingPlanId {
-  const recommended = getRecommendedPlan(role);
-  if (recommended === 'enterprise') return 'organizer';
-  return recommended;
+  // only the monthly (₹100) plan is sold right now
+  return getRecommendedPlan(role) === 'free' ? 'free' : 'monthly';
 }
 
-const { monthly, yearly } = PRICING_DISPLAY;
-const organizerBaseInr = ORGANIZER_MIN_SCANS * ORGANIZER_PRICE_PER_SCAN_INR;
+const { monthly } = PRICING_DISPLAY;
 
 export type OnboardingPlanCard = {
   id: OnboardingPlanId;
@@ -60,32 +53,5 @@ export const ONBOARDING_PLAN_CARDS: readonly OnboardingPlanCard[] = [
       'Board themes & priority validation',
     ],
     cta: 'Subscribe monthly',
-  },
-  {
-    id: 'organizer',
-    title: 'Prepaid scans',
-    price: formatOrganizerInr(organizerBaseInr),
-    priceSuffix: ' base pack',
-    tagline: 'Pay-as-you-go — no subscription required',
-    features: [
-      `From ${ORGANIZER_MIN_SCANS.toLocaleString('en-IN')} scans per pack`,
-      'Top up anytime when you need more',
-      'Or use alongside Pro monthly / yearly',
-    ],
-    recommended: true,
-    cta: 'Buy scan credits',
-  },
-  {
-    id: 'yearly',
-    title: 'Pro Yearly',
-    price: formatInr(yearly.priceInr),
-    priceSuffix: '/year',
-    tagline: `${yearly.scanLimit.toLocaleString('en-IN')} scans per year`,
-    features: [
-      `${yearly.scanLimit.toLocaleString('en-IN')} scans per year`,
-      'Everything in Pro Monthly',
-      'Best value for regular players',
-    ],
-    cta: 'Subscribe yearly',
   },
 ] as const;

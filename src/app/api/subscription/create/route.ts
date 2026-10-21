@@ -27,14 +27,21 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return auth.response;
     const user = auth.user;
 
+    let requestedPlan: unknown;
     try {
       const body = await req.json();
-      if (body?.plan === 'enterprise') planType = 'enterprise';
-      else if (body?.plan === 'yearly') planType = 'yearly';
-      else if (body?.plan === 'monthly') planType = 'monthly';
+      requestedPlan = body?.plan;
     } catch {
       // default monthly
     }
+    // only the monthly (₹100) plan is sold; reject anything else
+    if (requestedPlan !== undefined && requestedPlan !== 'monthly') {
+      return NextResponse.json(
+        { error: 'This plan is not available. Only the monthly plan can be purchased.' },
+        { status: 400 },
+      );
+    }
+    planType = 'monthly';
 
     const planId = getRazorpayPlanId(planType);
     if (!planId) {
